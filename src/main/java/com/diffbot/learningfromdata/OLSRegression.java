@@ -48,13 +48,17 @@ public class OLSRegression {
 		double[][] inv = MathUtils.multiply(r_i, q_t);
 		double[][] y = MathUtils.transpose(new double[][] {y_t});
 		w = MathUtils.transpose(MathUtils.multiply(inv, y))[0];
+		
+		if (Arrays.stream(w).anyMatch(d -> Double.isNaN(d))) {
+			System.out.println("WARNING: weights array contains NaN");
+		}
 	}
 
 	public double eval(double[] x) {
 		return MathUtils.dotProduct(w, padBias(x));
 	}
 	
-	private static double[] padBias(double[] x) {
+	public static double[] padBias(double[] x) {
 		double[] p = new double[x.length + 1];
 		p[0] = 1;
 		System.arraycopy(x, 0, p, 1, x.length);
@@ -90,8 +94,8 @@ public class OLSRegression {
 	}
 	
 	private static TrainingExamples getGeneratedExamples(int numExamples, int numFields, double std) {
-		double[] trueWeights = new double[numFields];
-		for (int i = 0; i < numFields; i++) {
+		double[] trueWeights = new double[numFields + 1];
+		for (int i = 0; i < numFields + 1; i++) {
 			trueWeights[i] = RANDOM.nextDouble();
 		}
 		
@@ -102,48 +106,49 @@ public class OLSRegression {
 			for (int j = 0; j < numFields; j++) {
 				xs[i][j] = RANDOM.nextDouble();
 			}
-			ys[i] = MathUtils.dotProduct(xs[i], trueWeights) + std * RANDOM.nextGaussian();
+			ys[i] = MathUtils.dotProduct(padBias(xs[i]), trueWeights) + std * RANDOM.nextGaussian();
 		}
 		return new TrainingExamples(xs, ys);
 	}
 	
 	public double[] printStats(double[][] x, double[] y_t) {		
-		double[] guesses = new double[x.length];
+		double[] estimates = new double[x.length];
 		for (int i = 0; i < x.length; i++) {
-			guesses[i] = eval(x[i]);
+			estimates[i] = eval(x[i]);
 		}		
-		double avg_guess = Arrays.stream(guesses).sum() / x.length;
-		double avg_y = Arrays.stream(y_t).sum() / y_t.length;
+		double avg_estimate = Arrays.stream(estimates).sum() / x.length;
 		
 		double mse = 0;
 		double var = 0;
 		double bias = 0;
 		for (int i = 0; i < x.length; i++) {
-			mse += Math.pow(guesses[i] - y_t[i], 2); 
-			var += Math.pow(guesses[i]- avg_guess, 2);
-			bias += avg_guess - y_t[i];
+			mse += Math.pow(estimates[i] - y_t[i], 2); 
+			var += Math.pow(estimates[i]- avg_estimate, 2);
+			bias += Math.pow(avg_estimate - y_t[i], 2);
 		}
 		mse = mse / x.length;
 		var = var / x.length;
+		bias = bias / x.length;
 		
 		System.out.println("\tvar: " + var);
 		System.out.println("\tbias: " + bias);
-		System.out.println("\tv+b: " + (var + Math.pow(bias, 2)));
+		System.out.println("\tv+b: " + (var + bias));
 		System.out.println("\tmse: " + mse);
-		System.out.println("\tire: " + Math.abs(mse - var + Math.pow(bias, 2)));		
+		System.out.println("\tire: " + Math.abs(mse - (var + bias)));		
 		
 		return new double[]{var, bias, mse};
 	}
 	
+	@SuppressWarnings("unchecked")
 	public static void main(String[] args) throws IOException {
 		DataTable var = new DataTable(Integer.class, Double.class);
 		DataTable bias = new DataTable(Integer.class, Double.class);
 		DataTable vb = new DataTable(Integer.class, Double.class);
 		DataTable mse = new DataTable(Integer.class, Double.class);
-		for (int i = 1; i <= NUM_FIELDS; i++) {
+		for (int i = 0; i <= NUM_FIELDS; i++) {
 			System.out.println(String.format("Training OLSRegression using using wine-quality dataset on " + i + " fields..."));
-			TrainingExamples es = getGeneratedExamples(100_000, i, 0.2);
-//			TrainingExamples es = getTrainingExamples(DATA_FILE_RED, NUM_EXAMPLES_RED, i);
+//			TrainingExamples es = getGeneratedExamples(3, i, 0);
+			TrainingExamples es = getTrainingExamples(DATA_FILE_RED, NUM_EXAMPLES_RED, i);
 //			TrainingExamples es = getTrainingExamples(DATA_FILE_WHITE, NUM_EXAMPLES_WHITE, i);
 			
 			OLSRegression model = new OLSRegression(es.xs, es.ys);
@@ -174,10 +179,10 @@ public class OLSRegression {
 		plot.setPointRenderers(fnD2s, fnRenderer);
 
 		plot.setInsets(new Insets2D.Double(20.0, 40.0, 40.0, 40.0));
-		plot.getTitle().setText("Perceptron using generated dataset");	
+		plot.getTitle().setText("Ordinary Least Squares: Bias, Variance, MSE");	
 		plot.setLegendVisible(true);
 	
-		PlotUtils.drawPlot(plot);
+//		PlotUtils.drawPlot(plot);
 		
 		if (DEBUG) {
 			double[][] x = {{12, -51, 4}, {6, 167, -68}, {-4, 24, -41}};
