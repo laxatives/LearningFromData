@@ -17,10 +17,12 @@ import de.erichseifert.gral.plots.lines.LineRenderer;
 
 public class OLSBiasVariance {
 
-	private static final int MAX_DOF = 16;
-	private static final int NUM_EXAMPLES = 100;
-	private static final double NOISE_STD = 0;
-	private static Random RANDOM = new Random();
+	// decent settings: {64, 128, N/10, 2, 3)
+	private static final int MAX_DOF = 64;
+	private static final int NUM_EXAMPLES = 128;
+	private static final int NUM_HOLDOUT = NUM_EXAMPLES / 10;
+	private static final double NOISE_STD = 2;
+	private static Random RANDOM = new Random(3);
 	
 	private static double[] getStats(OLSRegression model, double[][] x, double[] y_t) {		
 		double[] estimates = new double[x.length];
@@ -46,9 +48,9 @@ public class OLSBiasVariance {
 	}
 	
 	@SuppressWarnings("unchecked")
-	public static void main(String[] args) throws IOException {		
+	public static void main(String[] args) throws IOException {
 		double[] trueWeights = new double[MAX_DOF + 1];
-		double trueDOF = RANDOM.nextInt(MAX_DOF / 4) + (2 * MAX_DOF / 3);
+		double trueDOF = RANDOM.nextInt(MAX_DOF / 4) + (MAX_DOF / 2);
 		for (int i = 0; i < trueDOF; i++) {
 			trueWeights[i] = RANDOM.nextDouble() + 1;
 		}
@@ -57,8 +59,8 @@ public class OLSBiasVariance {
 		
 		double[][] completeXs = new double[NUM_EXAMPLES][MAX_DOF - 1];
 		double[] ys = new double[NUM_EXAMPLES];
-		double[][] holdoutXs = new double[NUM_EXAMPLES][MAX_DOF - 1];
-		double[] holdoutYs = new double[NUM_EXAMPLES];
+		double[][] holdoutXs = new double[NUM_HOLDOUT][MAX_DOF - 1];
+		double[] holdoutYs = new double[NUM_HOLDOUT];
 		
 		// compute X to evaluate true Y for each sample
 		for (int i = 0; i < NUM_EXAMPLES; i++) {
@@ -68,7 +70,9 @@ public class OLSBiasVariance {
 				completeXs[i][j] = completeXs[i][0] * completeXs[i][j - 1];
 			}			
 			ys[i] = MathUtils.dotProduct(OLSRegression.padBias(completeXs[i]), trueWeights) + NOISE_STD * RANDOM.nextGaussian();
-
+		}
+		
+		for (int i = 0; i < NUM_HOLDOUT; i++) {
 			double hx = 0.5 * RANDOM.nextGaussian() + 1;
 			holdoutXs[i][0] = hx;
 			for (int j = 1; j < holdoutXs[i].length; j++) {
@@ -86,10 +90,12 @@ public class OLSBiasVariance {
 			
 			// need to resize xs at every iteration since OLS input must be full-rank
 			double[][] xs = new double[NUM_EXAMPLES][dof];
-			double[][] testXs = new double[NUM_EXAMPLES][dof];
-			for (int i = 0; i < xs.length; i++) {
-				for (int j = 0; j < xs[0].length; j++) {
+			double[][] testXs = new double[NUM_HOLDOUT][dof];
+			for (int j = 0; j < dof; j++) {
+				for (int i = 0; i < NUM_EXAMPLES; i++) {
 					xs[i][j] = completeXs[i][j];
+				}
+				for (int i = 0; i < NUM_HOLDOUT; i++) {
 					testXs[i][j] = holdoutXs[i][j];
 				}
 			}

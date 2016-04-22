@@ -65,7 +65,7 @@ public class OLSRegression {
 		return p;
 	}
 	
-	private static double[][] padBias(double[][] x) {
+	public static double[][] padBias(double[][] x) {
 		double[][] p = new double[x.length][x[0].length + 1];
 		for (int i = 0; i < x.length; i++) {
 			double[] padded = padBias(x[i]);
