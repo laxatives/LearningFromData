@@ -15,7 +15,7 @@ public class PlotUtils {
 	public static final Color GOLD = new Color(239, 184, 43);
 	public static final Color GREEN = new Color(106, 166, 53);
 	public static final Color RED = new Color(240, 127, 80);
-	// Gral doesn't care about the alpha...
+	// Gral ignores alpha channel...
 	public static final Color TRANSPARENT = new Color(0, 0, 0, 0);
 	
 	public static void drawPlot(Drawable plot) {

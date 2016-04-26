@@ -1,4 +1,4 @@
-package com.diffbot.learningfromdata;
+package com.diffbot.learningfromdata.demo;
 
 import java.util.Random;
 
@@ -14,7 +14,9 @@ import de.erichseifert.gral.plots.lines.DefaultLineRenderer2D;
 import de.erichseifert.gral.plots.lines.LineRenderer;
 
 /**
- * From Exercise 1.10
+ * From Exercise 1.10 in Learning from Data
+ * Demonstrates the Hoeffding Inequality assumes the hypothesis is fixed
+ * before data is generated/sampled.
  */
 public class CoinFlipping {
 	private static final double BAR_DISPLACEMENT = 1;
@@ -23,7 +25,7 @@ public class CoinFlipping {
 	
 	private static final int NUM_COINS = 1_000;
 	private static final int NUM_FLIPS = 10;
-	private static final int TRIALS = 100_000;
+	private static final int TRIALS = 10_000;
 	private static final double TRUE_PROBABILITY = 0.5;
 	private static final Random RANDOM = new Random();
 	
