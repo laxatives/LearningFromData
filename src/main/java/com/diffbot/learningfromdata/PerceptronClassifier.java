@@ -19,7 +19,9 @@ public class PerceptronClassifier {
 	private static final boolean LINEARLY_SEPARABLE = false;
 	private static final int NUM_FEATURES = 2;
 	private static final int MAX_EPOCHS = 10_000;
-	private static final int SAMPLE_COUNT = 10_000;
+	private static final int SAMPLE_COUNT = 8_000;
+	private static final int HOLDOUT_COUNT = SAMPLE_COUNT / 2;
+	private static boolean POCKET = true;
 	
 	public double[] weights;
 	public double bias;
@@ -95,35 +97,62 @@ public class PerceptronClassifier {
 		System.out.println("\tGenerating dataset...");
 		double[][] trainingSet = new double[SAMPLE_COUNT][NUM_FEATURES];
 		double[] labels = new double[SAMPLE_COUNT];
+		double[][] holdoutSet = new double[HOLDOUT_COUNT][NUM_FEATURES];
+		double[] holdoutLabels = new double[HOLDOUT_COUNT];
 		if (LINEARLY_SEPARABLE) {
 			System.out.println(String.format("\tTrue weight vector: %s\n\tTrue bias: ", Utils.arrayToString(trueWeights), trueBias));
-			for(int i = 0; i < trainingSet.length; i++){
+			for (int i = 0; i < trainingSet.length; i++) {
 				for (int j = 0; j < NUM_FEATURES; j++) {
 					trainingSet[i][j] = 10*RANDOM.nextGaussian();
 				}
 				labels[i] = MathUtils.dotProduct(trueWeights, trainingSet[i]) > trueBias ? 1 : -1;
 			}
+			for (int i = 0; i < holdoutSet.length; i++) {
+				for (int j = 0; j < NUM_FEATURES; j++) {
+					holdoutSet[i][j] = 10*RANDOM.nextGaussian();
+				}
+				holdoutLabels[i] = MathUtils.dotProduct(trueWeights, holdoutSet[i]) > trueBias ? 1 : -1;
+			}
 		} else {
-			for(int i = 0; i < trainingSet.length; i++){
+			for (int i = 0; i < trainingSet.length; i++) {
 				boolean label = RANDOM.nextBoolean();
 				for (int j = 0; j < NUM_FEATURES; j++) {
 					trainingSet[i][j] = 10*RANDOM.nextGaussian() + (label ? 15 : -15);
 				}
 				labels[i] = label ? 1 : -1;
 			}
+			for(int i = 0; i < holdoutSet.length; i++){
+				boolean label = RANDOM.nextBoolean();
+				for (int j = 0; j < NUM_FEATURES; j++) {
+					holdoutSet[i][j] = 10*RANDOM.nextGaussian() + (label ? 15 : -15);
+				}
+				holdoutLabels[i] = label ? 1 : -1;
+			}
 		}
 		
 		System.out.println("\tTraining degree 2 perceptron...");
 		long start = System.currentTimeMillis();
 		PerceptronClassifier perceptron = new PerceptronClassifier(NUM_FEATURES);
+		int prevErrors = trainingSet.length;
+		double[] prevWeights = perceptron.weights;
 		for (int i = 1; i <= MAX_EPOCHS; i++) {
 			int errors = perceptron.train(trainingSet, labels); 
 			if (errors == 0) {
 				System.out.println(String.format("\t\tPerceptron converged in %d iterations.", i));
 				break;
 			}
+			
 			System.out.println(String.format("\t\tCompleted epoch %d with %d mislabeled out of %d total examples.", i, errors, trainingSet.length));
 			System.out.println(String.format("\t\tWeights: %s\n\t\tBias: %.2f", Utils.arrayToString(perceptron.weights), perceptron.bias));
+			
+			if (POCKET && errors > prevErrors) {
+				System.out.println(String.format("\t\tPocket perceptron performance peaked in %d iterations with %d errors", i, errors));
+				perceptron.weights = prevWeights;
+				break;
+			}
+			
+			prevErrors = errors;
+			prevWeights = perceptron.weights;
 		}
 
 		System.out.println(String.format("\tTrue weight vector: %s\n\tTrue bias: %.2f", Utils.arrayToString(trueWeights), trueBias));
@@ -137,23 +166,41 @@ public class PerceptronClassifier {
 		DataTable falsePositivesD2 = new DataTable(Double.class, Double.class);
 		DataTable trueNegativesD2 = new DataTable(Double.class, Double.class);
 		DataTable falseNegativesD2 = new DataTable(Double.class, Double.class);
-		for (int i = 0; i < trainingSet.length; i++) {
-			double[] input = trainingSet[i];
-			double label = labels[i];
+		int tp = 0;
+		int fp = 0;
+		int tn = 0;
+		int fn = 0;
+		for (int i = 0; i < holdoutSet.length; i++) {
+			double[] input = holdoutSet[i];
+			double label = holdoutLabels[i];
 			if (label > 0) {
 				if (perceptron.classify(input) > 0) {
 					truePositivesD2.add(input[0], input[1]);
+					tp++;
 				} else {
 					falseNegativesD2.add(input[0], input[1]);
+					fn++;
 				}
 			} else {
 				if (perceptron.classify(input) > 0) {
-					falsePositivesD2.add(input[0], input[1]);					
+					falsePositivesD2.add(input[0], input[1]);
+					fp++;
 				} else {
-					trueNegativesD2.add(input[0], input[1]);					
+					trueNegativesD2.add(input[0], input[1]);
+					tn++;
 				}				
 			}
 		}
+		
+		System.out.println("TP: " + tp);
+		System.out.println("FP: " + fp);
+		System.out.println("TN: " + tn);
+		System.out.println("FN: " + fn);
+		System.out.println("TOT: " + holdoutLabels.length);
+		float p = tp / (float) (tp + fp);
+		float r = tp / (float) (tp + fn);
+		System.out.println("P/R: " + p + "/" + r);
+		System.out.println("F1: " + 2 * p * r / (p + r));
 
 		DataSeries tpD2s = new DataSeries("True positives", truePositivesD2, 0, 1);
 		DataSeries fpD2s = new DataSeries("False positives", falsePositivesD2, 0, 1);

@@ -17,11 +17,13 @@ import de.erichseifert.gral.plots.lines.LineRenderer;
 
 public class OLSBiasVariance {
 
-	// decent settings: {64, 128, N/10, 2, 3)
+	// decent settings: {64, 128, N/10, 2, 1, 0.5, 3)
 	private static final int MAX_DOF = 64;
 	private static final int NUM_EXAMPLES = 128;
 	private static final int NUM_HOLDOUT = NUM_EXAMPLES / 10;
 	private static final double NOISE_STD = 2;
+	private static final double X_MEAN = 1;
+	private static final double X_STD = 0.5;
 	private static Random RANDOM = new Random(3);
 	
 	private static double[] getStats(OLSRegression model, double[][] x, double[] y_t) {		
@@ -64,7 +66,7 @@ public class OLSBiasVariance {
 		
 		// compute X to evaluate true Y for each sample
 		for (int i = 0; i < NUM_EXAMPLES; i++) {
-			double x = 0.5 * RANDOM.nextGaussian() + 1;
+			double x = X_STD * RANDOM.nextGaussian() + X_MEAN;
 			completeXs[i][0] = x;
 			for (int j = 1; j < completeXs[i].length; j++) {
 				completeXs[i][j] = completeXs[i][0] * completeXs[i][j - 1];
@@ -73,7 +75,7 @@ public class OLSBiasVariance {
 		}
 		
 		for (int i = 0; i < NUM_HOLDOUT; i++) {
-			double hx = 0.5 * RANDOM.nextGaussian() + 1;
+			double hx = X_STD * RANDOM.nextGaussian() + X_MEAN;
 			holdoutXs[i][0] = hx;
 			for (int j = 1; j < holdoutXs[i].length; j++) {
 				holdoutXs[i][j] = holdoutXs[i][0] * holdoutXs[i][j - 1];
