@@ -1,9 +1,10 @@
-package com.diffbot.learningfromdata;
+package com.diffbot.learningfromdata.demo;
 
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Random;
 
+import com.diffbot.learningfromdata.regression.OLSRegression;
 import com.diffbot.learningfromdata.utils.MathUtils;
 import com.diffbot.learningfromdata.utils.PlotUtils;
 import com.diffbot.learningfromdata.utils.Utils;
@@ -15,6 +16,11 @@ import de.erichseifert.gral.plots.XYPlot;
 import de.erichseifert.gral.plots.lines.DefaultLineRenderer2D;
 import de.erichseifert.gral.plots.lines.LineRenderer;
 
+/**
+ * Plots MSE, variance, bias, variance + bias^2 vs number of parameters
+ * using a generated dataset. Some numerical instability issues may
+ * distort some plots.
+ */
 public class OLSBiasVariance {
 
 	// decent settings: {64, 128, N/10, 2, 1, 0.5, 3)
@@ -31,20 +37,20 @@ public class OLSBiasVariance {
 		for (int i = 0; i < x.length; i++) {
 			estimates[i] = model.eval(x[i]);
 		}		
-		double avg_estimate = Arrays.stream(estimates).sum() / x.length;
+		double avg_estimate = Arrays.stream(estimates).sum() / estimates.length;
 		
 		double mse = 0;
 		double var = 0;
 		double bias = 0;
 		for (int i = 0; i < x.length; i++) {
-			mse += Math.pow(estimates[i] - y_t[i], 2); 
+			mse += Math.pow(y_t[i] - estimates[i], 2); 
 			var += Math.pow(estimates[i]- avg_estimate, 2);
 			bias += avg_estimate - y_t[i];			
 		}		
 		
 		mse /= x.length;
 		var /= x.length;
-		bias = Math.pow(bias, 2) / x.length;
+		bias = Math.pow(bias / x.length, 2);
 		
 		return new double[]{var, bias, mse};
 	}
@@ -52,11 +58,11 @@ public class OLSBiasVariance {
 	@SuppressWarnings("unchecked")
 	public static void main(String[] args) throws IOException {
 		double[] trueWeights = new double[MAX_DOF + 1];
-		double trueDOF = RANDOM.nextInt(MAX_DOF / 4) + (MAX_DOF / 2);
-		for (int i = 0; i < trueDOF; i++) {
+		double TRUE_DOF = RANDOM.nextInt(MAX_DOF / 4) + (MAX_DOF / 2);
+		for (int i = 0; i < TRUE_DOF; i++) {
 			trueWeights[i] = RANDOM.nextDouble() + 1;
 		}
-		System.out.println("True DOF: " + trueDOF);
+		System.out.println("True DOF: " + TRUE_DOF);
 		System.out.println("True weights: " + Utils.arrayToString(trueWeights));
 		
 		double[][] completeXs = new double[NUM_EXAMPLES][MAX_DOF - 1];
@@ -108,10 +114,11 @@ public class OLSBiasVariance {
 			bias.add(dof, stats[1]);
 			vb.add(dof, stats[0] + stats[1]);
 			mse.add(dof, stats[2]);
-			System.out.println(Utils.arrayToString(stats));
+			System.out.println("\tStats: " + Utils.arrayToString(stats));
+			System.out.println("\tWeights: " + Utils.arrayToString(model.w));
 		}
 		
-		System.out.println("True DOF: " + trueDOF);
+		System.out.println("True DOF: " + TRUE_DOF);
 		System.out.println("True weights: " + Utils.arrayToString(trueWeights));
 		
 		DataSeries varDS = new DataSeries("Variance", var, 0, 1);

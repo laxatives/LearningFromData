@@ -1,4 +1,4 @@
-package com.diffbot.learningfromdata;
+package com.diffbot.learningfromdata.classifiers;
 
 import java.util.Random;
 
@@ -13,14 +13,7 @@ import de.erichseifert.gral.plots.XYPlot;
 import de.erichseifert.gral.plots.points.DefaultPointRenderer2D;
 import de.erichseifert.gral.plots.points.PointRenderer;
 
-public class PerceptronClassifier {
-	private static final Random RANDOM = new Random();
-	
-	private static final boolean LINEARLY_SEPARABLE = false;
-	private static final int NUM_FEATURES = 2;
-	private static final int MAX_EPOCHS = 10_000;
-	private static final int SAMPLE_COUNT = 8_000;
-	private static final int HOLDOUT_COUNT = SAMPLE_COUNT / 2;
+public class PerceptronClassifier implements BinaryClassifier {
 	private static boolean POCKET = true;
 	
 	public double[] weights;
@@ -86,7 +79,14 @@ public class PerceptronClassifier {
 	
 	public double classify(double[] input) {
 		return MathUtils.dotProduct(input, weights) > bias ? 1 : -1; 
-	}
+	}	
+	
+	private static final Random RANDOM = new Random();	
+	private static final boolean LINEARLY_SEPARABLE = false;
+	private static final int NUM_FEATURES = 2;
+	private static final int MAX_EPOCHS = 10_000;
+	private static final int SAMPLE_COUNT = 8_000;
+	private static final int HOLDOUT_COUNT = SAMPLE_COUNT / 2;
 	
 	@SuppressWarnings("unchecked")
 	public static void main(String[] args) {

@@ -1,17 +1,16 @@
-package com.diffbot.learningfromdata;
+package com.diffbot.learningfromdata.regression;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Random;
 
+import com.diffbot.learningfromdata.data.DataSet.TrainingExamples;
+import com.diffbot.learningfromdata.data.RedWineQualityData;
+import com.diffbot.learningfromdata.data.WhiteWineQualityData;
 import com.diffbot.learningfromdata.utils.MathUtils;
 import com.diffbot.learningfromdata.utils.PlotUtils;
 import com.diffbot.learningfromdata.utils.MathUtils.QRDecomp;
 import com.diffbot.learningfromdata.utils.Utils;
-import com.diffbot.learningfromdata.utils.Utils.TrainingExamples;
 
 import de.erichseifert.gral.data.DataSeries;
 import de.erichseifert.gral.data.DataTable;
@@ -20,18 +19,10 @@ import de.erichseifert.gral.plots.XYPlot;
 import de.erichseifert.gral.plots.points.DefaultPointRenderer2D;
 import de.erichseifert.gral.plots.points.PointRenderer;
 
-public class OLSRegression {
-
-	private static final String DATA_DIR = "/home/bhan/workspace/LearningFromData/src/main/resources";
-	private static final File DATA_FILE_WHITE = new File(DATA_DIR, "winequality-white.csv");
-	private static final int NUM_EXAMPLES_WHITE = 4898;
-	private static final File DATA_FILE_RED = new File(DATA_DIR, "winequality-red.csv");
-	private static final int NUM_EXAMPLES_RED = 1599;
-	private static final int NUM_FIELDS = 11; // 11
-	private static Random RANDOM = new Random();
-	
-	private static final boolean DEBUG = false;
-	
+/**
+ * Applies Ordinary Least Squares to Wine Quality data sets (red or white).
+ */
+public class OLSRegression implements RegressionModel {
 	public double[] w;
 	
 	/**
@@ -73,25 +64,12 @@ public class OLSRegression {
 		}
 		return p;
 	}
-
-	private static TrainingExamples getTrainingExamples(File dataFile, int numExamples, int numFields) throws IOException {
-		double[][] xs = new double[numExamples][numFields];
-		double[] ys = new double[numExamples];
-		try (BufferedReader br = new BufferedReader(new FileReader(dataFile))) {
-			int i = 0;
-			String line = br.readLine(); // skip header
-		    while ((line = br.readLine()) != null) {
-		    	String[] features = line.split(";");
-		    	double[] x = Arrays.stream(features).limit(numFields).map(Double::valueOf).mapToDouble(Double::doubleValue).toArray();
-		    	Double y = Double.valueOf(features[numFields]);
-		    	
-		    	xs[i] = x;
-		    	ys[i] = y;
-		    	i++;
-		    }
-		}
-		return new TrainingExamples(xs, ys);
-	}
+	
+	private static final boolean GENERATED_DATA = false; // else red/white wine
+	private static final boolean WHITE_WINE = true; // else red wine
+	private static final int NUM_FIELDS = 11;
+	private static Random RANDOM = new Random();	
+	private static final boolean DEBUG = false;
 	
 	private static TrainingExamples getGeneratedExamples(int numExamples, int numFields, double std) {
 		double[] trueWeights = new double[numFields + 1];
@@ -147,9 +125,9 @@ public class OLSRegression {
 		DataTable mse = new DataTable(Integer.class, Double.class);
 		for (int i = 0; i <= NUM_FIELDS; i++) {
 			System.out.println(String.format("Training OLSRegression using using wine-quality dataset on " + i + " fields..."));
-//			TrainingExamples es = getGeneratedExamples(3, i, 0);
-			TrainingExamples es = getTrainingExamples(DATA_FILE_RED, NUM_EXAMPLES_RED, i);
-//			TrainingExamples es = getTrainingExamples(DATA_FILE_WHITE, NUM_EXAMPLES_WHITE, i);
+			TrainingExamples es = GENERATED_DATA ? getGeneratedExamples(3, i , 0) :
+					WHITE_WINE ? (new WhiteWineQualityData()).getTrainingExamples() : 
+						(new RedWineQualityData()).getTrainingExamples();
 			
 			OLSRegression model = new OLSRegression(es.xs, es.ys);
 			double[] stats = model.printStats(es.xs, es.ys);
