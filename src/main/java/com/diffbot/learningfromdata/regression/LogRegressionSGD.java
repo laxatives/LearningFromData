@@ -48,6 +48,7 @@ public class LogRegressionSGD implements RegressionModel {
 		}
 	}
 	
+	// TODO: this should depend on error
 	private void updateW(double[] gradient) {
 		gradient = MathUtils.scalarProduct(-NU, gradient);
 		w = MathUtils.sumArrays(w, gradient);
@@ -61,7 +62,7 @@ public class LogRegressionSGD implements RegressionModel {
 	
 	@Override
 	public double error(double h, double y) {
-		double s = Math.log(-h / (h - 1)); // inverse logistic (logit)
+		double s = Math.log(-h / (h - 1)); // logit function (inverse logistic)
 		return Math.log(1 + Math.exp(-y * s));
 	}
 	
@@ -75,12 +76,12 @@ public class LogRegressionSGD implements RegressionModel {
 		Labelset testSet = labelSets.get(1);
 		
 		System.out.println("Training Logistic Regression using Batch Gradient Descent...");
-		for (int i = 0; i < MAX_ITERATIONS; i++) {
+		for (int i = 1; i <= MAX_ITERATIONS; i++) {
 			System.out.println("Beginning epoch " + i + "...");
 			model.train(trainSet.xs, trainSet.ys);
-			System.out.println("Train {Var, Bias, MSE}: " + Utils.arrayToString(RegressionModel.getStats(model, testSet.xs, testSet.ys)));	
+			System.out.println("Train {Var, Bias, MSE}: " + Utils.arrayToString(RegressionModel.getStats(model, trainSet.xs, trainSet.ys)));	
 		}
 				
-		System.out.println("Test {Var, Bias, MSE}: " + Utils.arrayToString(RegressionModel.getStats(model, testSet.xs, testSet.ys)));
+		System.out.println("Test  {Var, Bias, MSE}: " + Utils.arrayToString(RegressionModel.getStats(model, testSet.xs, testSet.ys)));
 	}
 }

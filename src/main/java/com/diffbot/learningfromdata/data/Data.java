@@ -37,7 +37,6 @@ public interface Data {
 			}
 		}
 		
-		trainingXs.toArray(new double[][]{});
 		Labelset trainingLabels = new Labelset(trainingXs.toArray(new double[][]{}), Doubles.toArray(trainingYs));
 		Labelset holdoutLabels = new Labelset(holdoutXs.toArray(new double[][]{}), Doubles.toArray(holdoutYs));
 		return Arrays.asList(trainingLabels, holdoutLabels);
