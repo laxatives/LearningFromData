@@ -43,9 +43,32 @@ public class OLSRegression implements RegressionModel {
 	
 	@Override
 	public double error(double h, double y) {
-		return y - h;
+		return h - y;
 	}
-
+	
+	public static double[] getStats(OLSRegression model, double[][] x, double[] y_t) {             
+		double[] estimates = new double[x.length];
+		for (int i = 0; i < x.length; i++) {
+			estimates[i] = model.eval(x[i]);
+		}               
+		double avg_estimate = Arrays.stream(estimates).sum() / estimates.length;
+		
+		double mse = 0;
+		double var = 0;
+		double bias = 0;
+		for (int i = 0; i < x.length; i++) {
+			mse += Math.pow(model.error(estimates[i], y_t[i]), 2);
+			var += Math.pow(estimates[i] - avg_estimate, 2);
+			bias += avg_estimate - y_t[i];
+		}               
+		
+		mse /= x.length;
+		var /= x.length;
+		bias = Math.pow(bias, 2) / x.length;
+		               
+		return new double[]{var, bias, mse};
+	}
+	
 	private static final boolean WHITE_WINE = true; // else red wine
 	private static final boolean DEBUG = false;
 	
@@ -57,7 +80,7 @@ public class OLSRegression implements RegressionModel {
 				+ " Wine Quality Dataset...");		
 			
 		OLSRegression model = new OLSRegression(es.xs, es.ys);
-		double[] stats = RegressionModel.getStats(model, es.xs, es.ys);
+		double[] stats = getStats(model, es.xs, es.ys);
 		System.out.println("\t{MSE, Bias, Var}: " + Utils.arrayToString(stats));
 		
 		if (DEBUG) {
