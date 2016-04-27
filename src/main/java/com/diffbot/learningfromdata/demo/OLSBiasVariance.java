@@ -1,10 +1,10 @@
 package com.diffbot.learningfromdata.demo;
 
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.Random;
 
 import com.diffbot.learningfromdata.regression.OLSRegression;
+import com.diffbot.learningfromdata.regression.RegressionModel;
 import com.diffbot.learningfromdata.utils.MathUtils;
 import com.diffbot.learningfromdata.utils.PlotUtils;
 import com.diffbot.learningfromdata.utils.Utils;
@@ -32,29 +32,6 @@ public class OLSBiasVariance {
 	private static final double X_STD = 0.5;
 	private static Random RANDOM = new Random(3);
 	
-	private static double[] getStats(OLSRegression model, double[][] x, double[] y_t) {		
-		double[] estimates = new double[x.length];
-		for (int i = 0; i < x.length; i++) {
-			estimates[i] = model.eval(x[i]);
-		}		
-		double avg_estimate = Arrays.stream(estimates).sum() / estimates.length;
-		
-		double mse = 0;
-		double var = 0;
-		double bias = 0;
-		for (int i = 0; i < x.length; i++) {
-			mse += Math.pow(y_t[i] - estimates[i], 2); 
-			var += Math.pow(estimates[i]- avg_estimate, 2);
-			bias += avg_estimate - y_t[i];			
-		}		
-		
-		mse /= x.length;
-		var /= x.length;
-		bias = Math.pow(bias / x.length, 2);
-		
-		return new double[]{var, bias, mse};
-	}
-	
 	@SuppressWarnings("unchecked")
 	public static void main(String[] args) throws IOException {
 		double[] trueWeights = new double[MAX_DOF + 1];
@@ -77,7 +54,7 @@ public class OLSBiasVariance {
 			for (int j = 1; j < completeXs[i].length; j++) {
 				completeXs[i][j] = completeXs[i][0] * completeXs[i][j - 1];
 			}			
-			ys[i] = MathUtils.dotProduct(OLSRegression.padBias(completeXs[i]), trueWeights) + NOISE_STD * RANDOM.nextGaussian();
+			ys[i] = MathUtils.dotProduct(RegressionModel.padBias(completeXs[i]), trueWeights) + NOISE_STD * RANDOM.nextGaussian();
 		}
 		
 		for (int i = 0; i < NUM_HOLDOUT; i++) {
@@ -86,7 +63,7 @@ public class OLSBiasVariance {
 			for (int j = 1; j < holdoutXs[i].length; j++) {
 				holdoutXs[i][j] = holdoutXs[i][0] * holdoutXs[i][j - 1];
 			}			
-			holdoutYs[i] = MathUtils.dotProduct(OLSRegression.padBias(holdoutXs[i]), trueWeights) + NOISE_STD * RANDOM.nextGaussian();
+			holdoutYs[i] = MathUtils.dotProduct(RegressionModel.padBias(holdoutXs[i]), trueWeights) + NOISE_STD * RANDOM.nextGaussian();
 		}		
 		
 		DataTable var = new DataTable(Integer.class, Double.class);
@@ -109,12 +86,12 @@ public class OLSBiasVariance {
 			}
 			
 			OLSRegression model = new OLSRegression(xs, ys);
-			double[] stats = getStats(model, holdoutXs, holdoutYs);
+			double[] stats = RegressionModel.getStats(model, holdoutXs, holdoutYs);
 			var.add(dof, stats[0]);
 			bias.add(dof, stats[1]);
 			vb.add(dof, stats[0] + stats[1]);
 			mse.add(dof, stats[2]);
-			System.out.println("\tStats: " + Utils.arrayToString(stats));
+			System.out.println("\t{MSE, Bias, Var}: " + Utils.arrayToString(stats));
 			System.out.println("\tWeights: " + Utils.arrayToString(model.w));
 		}
 		

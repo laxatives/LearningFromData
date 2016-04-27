@@ -9,13 +9,13 @@ import java.util.Arrays;
 /**
  * 11 Float/Integer fields => Integer
  */
-public class RedWineQualityData implements DataSet {
+public class RedWineQualityData implements Data {
 	public static final URL DATA_PATH = RedWineQualityData.class
 			.getClassLoader().getResource("winequality-red.csv");
 	public static final int NUM_EXAMPLES = 1599;
 	public static final int NUM_FIELDS = 11;
 	
-	public TrainingExamples getTrainingExamples() throws IOException {
+	public Labelset getLabelset() throws IOException {
 		double[][] xs = new double[NUM_EXAMPLES][NUM_FIELDS];
 		double[] ys = new double[NUM_EXAMPLES];
 		try (BufferedReader br = new BufferedReader(
@@ -36,6 +36,6 @@ public class RedWineQualityData implements DataSet {
 		    	i++;
 		    }
 		}
-		return new TrainingExamples(xs, ys);
+		return new Labelset(xs, ys);
 	}
 }

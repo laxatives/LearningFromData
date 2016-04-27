@@ -17,11 +17,10 @@ public class PerceptronClassifier implements BinaryClassifier {
 	private static boolean POCKET = true;
 	
 	public double[] weights;
-	public double bias;
-
+	public double bias = 0;
+	
 	public PerceptronClassifier(int numFeatures) {
 		weights = new double[numFeatures];
-		bias = 0;
 	}
 	
 	/**
@@ -146,7 +145,7 @@ public class PerceptronClassifier implements BinaryClassifier {
 			System.out.println(String.format("\t\tWeights: %s\n\t\tBias: %.2f", Utils.arrayToString(perceptron.weights), perceptron.bias));
 			
 			if (POCKET && errors > prevErrors) {
-				System.out.println(String.format("\t\tPocket perceptron performance peaked in %d iterations with %d errors", i, errors));
+				System.out.println(String.format("\t\tPocket perceptron performance peaked in %d iterations with %d errors", i - 1, prevErrors));
 				perceptron.weights = prevWeights;
 				break;
 			}

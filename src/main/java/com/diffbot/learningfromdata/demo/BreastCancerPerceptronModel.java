@@ -6,7 +6,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 
 import com.diffbot.learningfromdata.classifiers.PerceptronClassifier;
-import com.diffbot.learningfromdata.data.DataSet.TrainingExamples;
+import com.diffbot.learningfromdata.data.Data.Labelset;
 import com.diffbot.learningfromdata.data.WisconsinBreastCancerData;
 import com.diffbot.learningfromdata.utils.PlotUtils;
 
@@ -27,7 +27,7 @@ public class BreastCancerPerceptronModel {
 	private static final int NUM_FIELDS = WisconsinBreastCancerData.NUM_FIELDS;
 	
 	public static void main(String[] args) throws IOException {
-		TrainingExamples es = new WisconsinBreastCancerData().getTrainingExamples();
+		Labelset es = new WisconsinBreastCancerData().getLabelset();
 		PerceptronClassifier classifier = new PerceptronClassifier(NUM_FIELDS);
 		
 		System.out.println("Training perceptron using Wisconsin Breast Cancer dataset...");
@@ -38,7 +38,7 @@ public class BreastCancerPerceptronModel {
 	}
 	
 	@SuppressWarnings("unchecked")
-	private static void plot(TrainingExamples es) {
+	private static void plot(Labelset es) {
 		// plot against each feature
 		for (int plotInd = 0; plotInd <= NUM_FIELDS; plotInd ++) {
 			System.out.println("\tPlotting results for input feature index " + plotInd + "...");		
