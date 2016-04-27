@@ -12,7 +12,7 @@ import java.util.stream.Collectors;
  * 10 Integer valued features => Binary
  * Data is filtered on entries WITHOUT missing data.
  */
-public class WisconsinBreastCancerData implements DataSet {
+public class WisconsinBreastCancerData implements Data {
 	public static final URL DATA_PATH = WisconsinBreastCancerData.class
 			.getClassLoader().getResource("breast-cancer-wisconsin-sanitized.data");
 	public static final int NUM_EXAMPLES = 682;
@@ -33,7 +33,7 @@ public class WisconsinBreastCancerData implements DataSet {
 		{9, "Malgignant"},
 	}).collect(Collectors.toMap(kv -> (Integer) kv[0], kv -> (String) kv[1]));
 	
-	public TrainingExamples getTrainingExamples() throws IOException {
+	public Labelset getLabelset() throws IOException {
 		double[][] xs = new double[NUM_EXAMPLES][NUM_FIELDS];
 		double[] ys = new double[NUM_EXAMPLES];
 		try (BufferedReader br = new BufferedReader(
@@ -53,6 +53,6 @@ public class WisconsinBreastCancerData implements DataSet {
 		    	ys[i] = y;		    			
 		    }
 		}
-		return new TrainingExamples(xs, ys);
+		return new Labelset(xs, ys);
 	}
 }

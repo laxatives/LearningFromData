@@ -1,13 +1,13 @@
 package com.diffbot.learningfromdata.classifiers;
 
-import com.diffbot.learningfromdata.data.DataSet.TrainingExamples;
+import com.diffbot.learningfromdata.data.Data.Labelset;
 
 public interface BinaryClassifier {
 
 	public int train(double[][] x, double[] y);	
 	public double classify(double[] input);
 	
-	public default void printStats(TrainingExamples es) {
+	public default void printStats(Labelset es) {
 		int tp = 0;
 		int fp = 0;
 		int tn = 0;
@@ -15,15 +15,15 @@ public interface BinaryClassifier {
 		for (int i = 0; i < es.xs.length; i++) {
 			double[] x = es.xs[i];
 			boolean y = es.ys[i] > 0;
-			boolean guess = this.classify(x) > 0;
+			boolean h = this.classify(x) > 0;
 			if (y) {
-				if (guess) {
+				if (h) {
 					tp += 1;
 				} else {
 					fn += 1;
 				}
 			} else {
-				if (guess) {
+				if (h) {
 					fp += 1;
 				} else {
 					tn += 1;
