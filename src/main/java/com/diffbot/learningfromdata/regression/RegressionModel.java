@@ -1,7 +1,5 @@
 package com.diffbot.learningfromdata.regression;
 
-import java.util.Arrays;
-
 public interface RegressionModel {
 
 	public double eval(double[] x);
@@ -21,29 +19,6 @@ public interface RegressionModel {
 			p[i] = padded;
 		}
 		return p;
-	}
-	
-	public static double[] getStats(RegressionModel model, double[][] x, double[] y_t) {             
-		double[] estimates = new double[x.length];
-		for (int i = 0; i < x.length; i++) {
-			estimates[i] = model.eval(x[i]);
-		}               
-		double avg_estimate = Arrays.stream(estimates).sum() / estimates.length;
-		
-		double mse = 0;
-		double var = 0;
-		double bias = 0;
-		for (int i = 0; i < x.length; i++) {
-			mse += Math.pow(model.error(estimates[i], y_t[i]), 2); 
-			var += Math.pow(estimates[i]- avg_estimate, 2);
-			bias += avg_estimate - y_t[i];                  
-		}               
-		
-		mse /= x.length;
-		var /= x.length;
-		bias = Math.pow(bias / x.length, 2);
-		               
-		return new double[]{var, bias, mse};
 	}
 	
 }

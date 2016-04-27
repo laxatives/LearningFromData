@@ -24,13 +24,14 @@ import de.erichseifert.gral.plots.lines.LineRenderer;
 public class OLSBiasVariance {
 
 	// decent settings: {64, 128, N/10, 2, 1, 0.5, 3)
-	private static final int MAX_DOF = 64;
-	private static final int NUM_EXAMPLES = 128;
-	private static final int NUM_HOLDOUT = NUM_EXAMPLES / 10;
-	private static final double NOISE_STD = 2;
+	// {16, 1024, N/4, 0.01, 1, 0.5, ANY)
+	private static final int MAX_DOF = 16;
+	private static final int NUM_EXAMPLES = 1024;
+	private static final int NUM_HOLDOUT = NUM_EXAMPLES / 4;
+	private static final double NOISE_STD = 0.01;
 	private static final double X_MEAN = 1;
 	private static final double X_STD = 0.5;
-	private static Random RANDOM = new Random(3);
+	private static Random RANDOM = new Random();
 	
 	@SuppressWarnings("unchecked")
 	public static void main(String[] args) throws IOException {
@@ -91,7 +92,7 @@ public class OLSBiasVariance {
 			bias.add(dof, stats[1]);
 			vb.add(dof, stats[0] + stats[1]);
 			mse.add(dof, stats[2]);
-			System.out.println("\t{MSE, Bias, Var}: " + Utils.arrayToString(stats));
+			System.out.println("\t{Var, Bias, MSE}: " + Utils.arrayToString(stats));
 			System.out.println("\tWeights: " + Utils.arrayToString(model.w));
 		}
 		
