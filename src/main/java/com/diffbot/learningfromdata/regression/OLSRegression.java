@@ -59,7 +59,7 @@ public class OLSRegression implements RegressionModel {
 		for (int i = 0; i < x.length; i++) {
 			mse += Math.pow(model.error(estimates[i], y_t[i]), 2);
 			var += Math.pow(estimates[i] - avg_estimate, 2);
-			bias += avg_estimate - y_t[i];
+			bias += avg_estimate - y_t[i]; // use true y		
 		}               
 		
 		mse /= x.length;

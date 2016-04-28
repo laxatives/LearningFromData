@@ -2,6 +2,7 @@ package com.diffbot.learningfromdata.classifiers;
 
 import java.util.Random;
 
+import com.diffbot.learningfromdata.data.Data.Labelset;
 import com.diffbot.learningfromdata.utils.MathUtils;
 import com.diffbot.learningfromdata.utils.PlotUtils;
 import com.diffbot.learningfromdata.utils.Utils;
@@ -14,13 +15,21 @@ import de.erichseifert.gral.plots.points.DefaultPointRenderer2D;
 import de.erichseifert.gral.plots.points.PointRenderer;
 
 public class PerceptronClassifier implements BinaryClassifier {
-	private static boolean POCKET = true;
-	
+	public boolean pocket = false;	
 	public double[] weights;
-	public double bias = 0;
-	
+	public double bias = 0;	
+	public double[] pocketWeights;
+	public double pocketBias = 0;
+
 	public PerceptronClassifier(int numFeatures) {
 		weights = new double[numFeatures];
+		pocketWeights = new double[numFeatures];
+	}
+	
+	public PerceptronClassifier(int numFeatures, boolean pocket) {
+		weights = new double[numFeatures];
+		pocketWeights = new double[numFeatures];
+		this.pocket = pocket;
 	}
 	
 	/**
@@ -28,12 +37,14 @@ public class PerceptronClassifier implements BinaryClassifier {
 	 * Returns the number of mislabeled elements.
 	 */
 	public int train(double[][] x, double[] y) {
+		for (int i = 0; i < x.length; i++) {
+			update(x[i], y[i]);
+		}
+		
 		int numMislabeled = 0;
 		for (int i = 0; i < x.length; i++) {
-			boolean correctlyLabeled = update(x[i], y[i]);
-			if (!correctlyLabeled) {
-				numMislabeled += 1;
-			}
+			double estimate = classify(x[i]);
+			if ((estimate > 0 && y[i] < 0) || (estimate < 0 && y[i] > 0)) numMislabeled++;
 		}
 		return numMislabeled;
 	}
@@ -41,6 +52,7 @@ public class PerceptronClassifier implements BinaryClassifier {
 	public int train(double[][] x, double[] y, int numIterations, boolean log) {
 		long start = System.currentTimeMillis();
 		int errors = 0;
+		int bestErrors = Integer.MAX_VALUE;
 		for (int i = 1; i <= numIterations; i++) {
 			errors = train(x, y); 
 			if (errors == 0) {
@@ -49,14 +61,22 @@ public class PerceptronClassifier implements BinaryClassifier {
 				}
 				break;
 			}
+			
+			if (errors < bestErrors) {
+				bestErrors = errors;
+				pocketWeights = weights;				
+				pocketBias = bias;
+			}
+			
 			if (log) {
 				System.out.println(String.format("\tCompleted epoch %d with %d mislabeled out of %d total examples.", i, errors, y.length));
 				System.out.println(String.format("\tEstimated Weights: %s\n\t\tBias: %.2f", Utils.arrayToString(weights), bias));
 			}
 		}
+		
 		float took = System.currentTimeMillis() - start;
 		System.out.println(String.format("\tTook %f ms (%.10f per instance)", took, took / y.length));
-		return errors;
+		return pocket ? bestErrors : errors;
 	}
 	
 	/**
@@ -77,7 +97,10 @@ public class PerceptronClassifier implements BinaryClassifier {
 	}
 	
 	public double classify(double[] input) {
-		return MathUtils.dotProduct(input, weights) > bias ? 1 : -1; 
+		if (pocket)
+			return MathUtils.dotProduct(input, pocketWeights) > pocketBias ? 1 : -1;
+		else
+			return MathUtils.dotProduct(input, weights) > bias ? 1 : -1;
 	}	
 	
 	private static final Random RANDOM = new Random();	
@@ -88,14 +111,82 @@ public class PerceptronClassifier implements BinaryClassifier {
 	private static final int HOLDOUT_COUNT = SAMPLE_COUNT / 2;
 	
 	@SuppressWarnings("unchecked")
+	private static void plotStats(PerceptronClassifier perceptron, Labelset es) {
+		System.out.println("\tPlotting results...");
+		DataTable truePositivesD2 = new DataTable(Double.class, Double.class);
+		DataTable falsePositivesD2 = new DataTable(Double.class, Double.class);
+		DataTable trueNegativesD2 = new DataTable(Double.class, Double.class);
+		DataTable falseNegativesD2 = new DataTable(Double.class, Double.class);
+		int tp = 0;
+		int fp = 0;
+		int tn = 0;
+		int fn = 0;
+		for (int i = 0; i < es.xs.length; i++) {
+			double[] input = es.xs[i];
+			double label = es.ys[i];
+			if (label > 0) {
+				if (perceptron.classify(input) > 0) {
+					truePositivesD2.add(input[0], input[1]);
+					tp++;
+				} else {
+					falseNegativesD2.add(input[0], input[1]);
+					fn++;
+				}
+			} else {
+				if (perceptron.classify(input) > 0) {
+					falsePositivesD2.add(input[0], input[1]);
+					fp++;
+				} else {
+					trueNegativesD2.add(input[0], input[1]);
+					tn++;
+				}				
+			}
+		}
+		
+		System.out.println("TP: " + tp);
+		System.out.println("FP: " + fp);
+		System.out.println("TN: " + tn);
+		System.out.println("FN: " + fn);
+		System.out.println("TOT: " + es.xs.length);
+		float p = tp / (float) (tp + fp);
+		float r = tp / (float) (tp + fn);
+		System.out.println("P/R: " + p + "/" + r);
+		System.out.println("F1: " + 2 * p * r / (p + r));
+
+		DataSeries tpD2s = new DataSeries("True positives", truePositivesD2, 0, 1);
+		DataSeries fpD2s = new DataSeries("False positives", falsePositivesD2, 0, 1);
+		DataSeries tnD2s = new DataSeries("True negatives", trueNegativesD2, 0, 1);
+		DataSeries fnD2s = new DataSeries("False negatives", falseNegativesD2, 0, 1);
+		XYPlot plot = new XYPlot(tpD2s, fpD2s, tnD2s, fnD2s);
+		
+		PointRenderer tpRenderer = new DefaultPointRenderer2D();
+		tpRenderer.setColor(PlotUtils.BLUE);
+		plot.setPointRenderers(tpD2s, tpRenderer);
+		PointRenderer tnRenderer = new DefaultPointRenderer2D();
+		tnRenderer.setColor(PlotUtils.GOLD);
+		plot.setPointRenderers(tnD2s, tnRenderer);		
+		PointRenderer fpRenderer = new DefaultPointRenderer2D();
+		fpRenderer.setColor(PlotUtils.GREEN);
+		plot.setPointRenderers(fpD2s, fpRenderer);
+		PointRenderer fnRenderer = new DefaultPointRenderer2D();
+		fnRenderer.setColor(PlotUtils.RED);
+		plot.setPointRenderers(fnD2s, fnRenderer);
+
+		plot.setInsets(new Insets2D.Double(20.0, 40.0, 40.0, 40.0));
+		plot.getTitle().setText("Perceptron using generated dataset");	
+		plot.setLegendVisible(true);
+	
+		PlotUtils.drawPlot(plot);
+	}
+	
 	public static void main(String[] args) {
-		System.out.println(String.format("Training perceptron using degree 2 feature set and %d...", SAMPLE_COUNT));
+		System.out.println("Training perceptron using generated feature set...");
 		double[] trueWeights = new double[] {RANDOM.nextGaussian(), RANDOM.nextGaussian()};
 		double trueBias = RANDOM.nextGaussian();
 		
 		System.out.println("\tGenerating dataset...");
 		double[][] trainingSet = new double[SAMPLE_COUNT][NUM_FEATURES];
-		double[] labels = new double[SAMPLE_COUNT];
+		double[] labels = new double[SAMPLE_COUNT];		
 		double[][] holdoutSet = new double[HOLDOUT_COUNT][NUM_FEATURES];
 		double[] holdoutLabels = new double[HOLDOUT_COUNT];
 		if (LINEARLY_SEPARABLE) {
@@ -129,102 +220,21 @@ public class PerceptronClassifier implements BinaryClassifier {
 			}
 		}
 		
-		System.out.println("\tTraining degree 2 perceptron...");
-		long start = System.currentTimeMillis();
+		System.out.println("\tTraining perceptron...");
 		PerceptronClassifier perceptron = new PerceptronClassifier(NUM_FEATURES);
-		int prevErrors = trainingSet.length;
-		double[] prevWeights = perceptron.weights;
-		for (int i = 1; i <= MAX_EPOCHS; i++) {
-			int errors = perceptron.train(trainingSet, labels); 
-			if (errors == 0) {
-				System.out.println(String.format("\t\tPerceptron converged in %d iterations.", i));
-				break;
-			}
-			
-			System.out.println(String.format("\t\tCompleted epoch %d with %d mislabeled out of %d total examples.", i, errors, trainingSet.length));
-			System.out.println(String.format("\t\tWeights: %s\n\t\tBias: %.2f", Utils.arrayToString(perceptron.weights), perceptron.bias));
-			
-			if (POCKET && errors > prevErrors) {
-				System.out.println(String.format("\t\tPocket perceptron performance peaked in %d iterations with %d errors", i - 1, prevErrors));
-				perceptron.weights = prevWeights;
-				break;
-			}
-			
-			prevErrors = errors;
-			prevWeights = perceptron.weights;
-		}
+		perceptron.train(trainingSet, labels, MAX_EPOCHS, false); 
 
 		System.out.println(String.format("\tTrue weight vector: %s\n\tTrue bias: %.2f", Utils.arrayToString(trueWeights), trueBias));
 		System.out.println(String.format("\tEstimated weight vector: %s\n\tEstimated bias: %.2f", Utils.arrayToString(perceptron.weights), perceptron.bias));
-		
-		float took = System.currentTimeMillis() - start;
-		System.out.println(String.format("\tTook %f ms (%.10f per instance)", took, took / SAMPLE_COUNT));
 				
-		System.out.println("\tPlotting results...");
-		DataTable truePositivesD2 = new DataTable(Double.class, Double.class);
-		DataTable falsePositivesD2 = new DataTable(Double.class, Double.class);
-		DataTable trueNegativesD2 = new DataTable(Double.class, Double.class);
-		DataTable falseNegativesD2 = new DataTable(Double.class, Double.class);
-		int tp = 0;
-		int fp = 0;
-		int tn = 0;
-		int fn = 0;
-		for (int i = 0; i < holdoutSet.length; i++) {
-			double[] input = holdoutSet[i];
-			double label = holdoutLabels[i];
-			if (label > 0) {
-				if (perceptron.classify(input) > 0) {
-					truePositivesD2.add(input[0], input[1]);
-					tp++;
-				} else {
-					falseNegativesD2.add(input[0], input[1]);
-					fn++;
-				}
-			} else {
-				if (perceptron.classify(input) > 0) {
-					falsePositivesD2.add(input[0], input[1]);
-					fp++;
-				} else {
-					trueNegativesD2.add(input[0], input[1]);
-					tn++;
-				}				
-			}
-		}
+		Labelset holdoutExamples = new Labelset(holdoutSet, holdoutLabels);
 		
-		System.out.println("TP: " + tp);
-		System.out.println("FP: " + fp);
-		System.out.println("TN: " + tn);
-		System.out.println("FN: " + fn);
-		System.out.println("TOT: " + holdoutLabels.length);
-		float p = tp / (float) (tp + fp);
-		float r = tp / (float) (tp + fn);
-		System.out.println("P/R: " + p + "/" + r);
-		System.out.println("F1: " + 2 * p * r / (p + r));
-
-		DataSeries tpD2s = new DataSeries("True positives", truePositivesD2, 0, 1);
-		DataSeries fpD2s = new DataSeries("False positives", falsePositivesD2, 0, 1);
-		DataSeries tnD2s = new DataSeries("True negatives", trueNegativesD2, 0, 1);
-		DataSeries fnD2s = new DataSeries("False negatives", falseNegativesD2, 0, 1);
-		XYPlot plot = new XYPlot(tpD2s, fpD2s, tnD2s, fnD2s);
+		System.out.println("Testing perceptron model without Pocket PLA");
+		plotStats(perceptron, holdoutExamples);
 		
-		PointRenderer tpRenderer = new DefaultPointRenderer2D();
-		tpRenderer.setColor(PlotUtils.BLUE);
-		plot.setPointRenderers(tpD2s, tpRenderer);
-		PointRenderer tnRenderer = new DefaultPointRenderer2D();
-		tnRenderer.setColor(PlotUtils.GOLD);
-		plot.setPointRenderers(tnD2s, tnRenderer);		
-		PointRenderer fpRenderer = new DefaultPointRenderer2D();
-		fpRenderer.setColor(PlotUtils.GREEN);
-		plot.setPointRenderers(fpD2s, fpRenderer);
-		PointRenderer fnRenderer = new DefaultPointRenderer2D();
-		fnRenderer.setColor(PlotUtils.RED);
-		plot.setPointRenderers(fnD2s, fnRenderer);
-
-		plot.setInsets(new Insets2D.Double(20.0, 40.0, 40.0, 40.0));
-		plot.getTitle().setText("Perceptron using generated dataset");	
-		plot.setLegendVisible(true);
-	
-		PlotUtils.drawPlot(plot);
+		System.out.println("\nTesting perceptron model with Pocket PLA");
+		perceptron.pocket = true;
+		plotStats(perceptron, holdoutExamples);
 	} 
 	
 }

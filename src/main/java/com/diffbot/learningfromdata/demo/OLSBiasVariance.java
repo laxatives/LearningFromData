@@ -28,7 +28,7 @@ public class OLSBiasVariance {
 	private static final int MAX_DOF = 16;
 	private static final int NUM_EXAMPLES = 1024;
 	private static final int NUM_HOLDOUT = NUM_EXAMPLES / 4;
-	private static final double NOISE_STD = 0.01;
+	private static final double NOISE_STD = 0.1;
 	private static final double X_MEAN = 1;
 	private static final double X_STD = 0.5;
 	private static Random RANDOM = new Random();
@@ -71,6 +71,8 @@ public class OLSBiasVariance {
 		DataTable bias = new DataTable(Integer.class, Double.class);
 		DataTable vb = new DataTable(Integer.class, Double.class);
 		DataTable mse = new DataTable(Integer.class, Double.class);
+		DataTable noise = new DataTable(Integer.class, Double.class);
+		DataTable err = new DataTable(Integer.class, Double.class);
 		for (int dof = 0; dof < MAX_DOF; dof++) {
 			System.out.println(String.format("Training OLSRegression using generated dataset with " + dof + " DOF..."));
 			
@@ -87,11 +89,14 @@ public class OLSBiasVariance {
 			}
 			
 			OLSRegression model = new OLSRegression(xs, ys);
-			double[] stats = RegressionModel.getStats(model, holdoutXs, holdoutYs);
+			double[] stats = OLSRegression.getStats(model, holdoutXs, holdoutYs);
 			var.add(dof, stats[0]);
 			bias.add(dof, stats[1]);
 			vb.add(dof, stats[0] + stats[1]);
 			mse.add(dof, stats[2]);
+			noise.add(dof, Math.pow(NOISE_STD, 2));
+			err.add(dof, 2 * Math.pow(NOISE_STD, 2) * dof / (float) NUM_EXAMPLES);
+			
 			System.out.println("\t{Var, Bias, MSE}: " + Utils.arrayToString(stats));
 			System.out.println("\tWeights: " + Utils.arrayToString(model.w));
 		}
@@ -100,10 +105,12 @@ public class OLSBiasVariance {
 		System.out.println("True weights: " + Utils.arrayToString(trueWeights));
 		
 		DataSeries varDS = new DataSeries("Variance", var, 0, 1);
-		DataSeries biasDS = new DataSeries("Bias", bias, 0, 1);
-		DataSeries vbDS = new DataSeries("Var + Bias", vb, 0, 1);
+		DataSeries biasDS = new DataSeries("Bias^2", bias, 0, 1);
+		DataSeries vbDS = new DataSeries("Var + Bias^2", vb, 0, 1);
 		DataSeries mseDS = new DataSeries("MSE", mse, 0, 1);
-		XYPlot plot = new XYPlot(varDS, biasDS, vbDS, mseDS);
+//		DataSeries noiseDS = new DataSeries("sigma^2", noise, 0, 1);
+//		DataSeries errDS = new DataSeries("Generalization error", err, 0, 1);
+		XYPlot plot = new XYPlot(varDS, biasDS, vbDS, mseDS /*, noiseDS, errDS*/ );
 		
 		LineRenderer varR = new DefaultLineRenderer2D();
 		varR.setColor(PlotUtils.BLUE);
@@ -117,6 +124,10 @@ public class OLSBiasVariance {
 		LineRenderer mseR = new DefaultLineRenderer2D();
 		mseR.setColor(PlotUtils.RED);
 		plot.setLineRenderers(mseDS, mseR);
+		LineRenderer noiseR = new DefaultLineRenderer2D();
+//		plot.setLineRenderers(noiseDS, noiseR);
+		LineRenderer errR = new DefaultLineRenderer2D();
+//		plot.setLineRenderers(errDS, errR);
 
 		plot.setInsets(new Insets2D.Double(20.0, 40.0, 40.0, 40.0));
 		plot.getTitle().setText("Ordinary Least Squares: Bias, Variance, MSE");	
