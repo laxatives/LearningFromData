@@ -15,21 +15,15 @@ import de.erichseifert.gral.plots.points.DefaultPointRenderer2D;
 import de.erichseifert.gral.plots.points.PointRenderer;
 
 public class PerceptronClassifier implements BinaryClassifier {
-	public boolean pocket = false;	
 	public double[] weights;
 	public double bias = 0;	
+	public int bestErrors = Integer.MAX_VALUE;
 	public double[] pocketWeights;
 	public double pocketBias = 0;
 
 	public PerceptronClassifier(int numFeatures) {
 		weights = new double[numFeatures];
 		pocketWeights = new double[numFeatures];
-	}
-	
-	public PerceptronClassifier(int numFeatures, boolean pocket) {
-		weights = new double[numFeatures];
-		pocketWeights = new double[numFeatures];
-		this.pocket = pocket;
 	}
 	
 	/**
@@ -46,37 +40,42 @@ public class PerceptronClassifier implements BinaryClassifier {
 			double estimate = classify(x[i]);
 			if ((estimate > 0 && y[i] < 0) || (estimate < 0 && y[i] > 0)) numMislabeled++;
 		}
+		
+		if (numMislabeled < bestErrors) {
+			bestErrors = numMislabeled;
+			pocketWeights = weights;				
+			pocketBias = bias;
+		}
+		
 		return numMislabeled;
 	}
 	
 	public int train(double[][] x, double[] y, int numIterations, boolean log) {
 		long start = System.currentTimeMillis();
-		int errors = 0;
-		int bestErrors = Integer.MAX_VALUE;
 		for (int i = 1; i <= numIterations; i++) {
-			errors = train(x, y); 
-			if (errors == 0) {
-				if (log) {
-					System.out.println(String.format("\tPerceptron converged in %d iterations.", i));
-				}
-				break;
+			train(x, y); 
+			
+			int numMislabeled = 0;
+			for (int j = 0; j < x.length; j++) {
+				double estimate = classify(x[j]);
+				if ((estimate > 0 && y[j] < 0) || (estimate < 0 && y[j] > 0)) numMislabeled++;
 			}
 			
-			if (errors < bestErrors) {
-				bestErrors = errors;
+			if (numMislabeled < bestErrors) {
+				bestErrors = numMislabeled;
 				pocketWeights = weights;				
 				pocketBias = bias;
 			}
 			
 			if (log) {
-				System.out.println(String.format("\tCompleted epoch %d with %d mislabeled out of %d total examples.", i, errors, y.length));
+				System.out.println(String.format("\tCompleted epoch %d with %d mislabeled out of %d total examples.", i, numMislabeled, y.length));
 				System.out.println(String.format("\tEstimated Weights: %s\n\t\tBias: %.2f", Utils.arrayToString(weights), bias));
 			}
 		}
 		
 		float took = System.currentTimeMillis() - start;
 		System.out.println(String.format("\tTook %f ms (%.10f per instance)", took, took / y.length));
-		return pocket ? bestErrors : errors;
+		return bestErrors;
 	}
 	
 	/**
@@ -97,6 +96,10 @@ public class PerceptronClassifier implements BinaryClassifier {
 	}
 	
 	public double classify(double[] input) {
+		return classify(input, false);
+	}
+	
+	public double classify(double[] input, boolean pocket) {
 		if (pocket)
 			return MathUtils.dotProduct(input, pocketWeights) > pocketBias ? 1 : -1;
 		else
@@ -230,10 +233,6 @@ public class PerceptronClassifier implements BinaryClassifier {
 		Labelset holdoutExamples = new Labelset(holdoutSet, holdoutLabels);
 		
 		System.out.println("Testing perceptron model without Pocket PLA");
-		plotStats(perceptron, holdoutExamples);
-		
-		System.out.println("\nTesting perceptron model with Pocket PLA");
-		perceptron.pocket = true;
 		plotStats(perceptron, holdoutExamples);
 	} 
 	
