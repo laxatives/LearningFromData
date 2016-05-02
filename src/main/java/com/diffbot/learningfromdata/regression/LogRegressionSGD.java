@@ -15,7 +15,7 @@ import com.diffbot.learningfromdata.data.WisconsinBreastCancerData;
 import com.diffbot.learningfromdata.utils.MathUtils;
 
 public class LogRegressionSGD implements RegressionModel {
-	private static final double NU = 0.1;
+	private static final double ETA = 0.1;
 	
 	public boolean batch = false;
 	public double[] w;
@@ -63,7 +63,7 @@ public class LogRegressionSGD implements RegressionModel {
 	
 	// TODO: this should depend on error
 	private void updateW(double[] gradient) {
-		gradient = MathUtils.scalarProduct(-NU, gradient);
+		gradient = MathUtils.scalarProduct(-ETA, gradient);
 		w = MathUtils.sumArrays(w, gradient);
 	}
 	
