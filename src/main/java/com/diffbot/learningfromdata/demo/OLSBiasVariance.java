@@ -25,10 +25,10 @@ public class OLSBiasVariance {
 
 	// decent settings: {64, 128, N/10, 2, 1, 0.5, 3)
 	// {16, 1024, N/4, 0.01, 1, 0.5, ANY)
-	private static final int MAX_DOF = 16;
-	private static final int NUM_EXAMPLES = 1024;
-	private static final int NUM_HOLDOUT = NUM_EXAMPLES / 4;
-	private static final double NOISE_STD = 0.1;
+	private static final int MAX_DOF = 8;
+	private static final int NUM_EXAMPLES = 128;
+	private static final int NUM_HOLDOUT = NUM_EXAMPLES / 10;
+	private static final double NOISE_STD = 2;
 	private static final double X_MEAN = 1;
 	private static final double X_STD = 0.5;
 	private static Random RANDOM = new Random();
@@ -38,7 +38,7 @@ public class OLSBiasVariance {
 		double[] trueWeights = new double[MAX_DOF + 1];
 		double TRUE_DOF = RANDOM.nextInt(MAX_DOF / 4) + (MAX_DOF / 2);
 		for (int i = 0; i < TRUE_DOF; i++) {
-			trueWeights[i] = RANDOM.nextDouble() + 1;
+			trueWeights[i] = 10 * (RANDOM.nextDouble() - 0.5);
 		}
 		System.out.println("True DOF: " + TRUE_DOF);
 		System.out.println("True weights: " + Utils.arrayToString(trueWeights));
