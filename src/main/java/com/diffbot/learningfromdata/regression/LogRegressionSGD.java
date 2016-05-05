@@ -15,22 +15,31 @@ import com.diffbot.learningfromdata.data.WisconsinBreastCancerData;
 import com.diffbot.learningfromdata.utils.MathUtils;
 
 public class LogRegressionSGD implements RegressionModel {
-	private static final double ETA = 0.1;
+	private static final double ETA = 0.1; // learning parameter
+	// TODO: this should increase as learning stabilizes
+	private static final double GAMMA = 0.5; // momentum parameter
 	
-	public boolean batch = false;
+	public Variant variant = Variant.STOCHASTIC; 
 	public double[] w;
+	
+	public enum Variant {
+		BATCH, STOCHASTIC, NEWTONS_METHOD, MOMENTUM, CONJUGATE;
+	}
+	
+	private double[] m;
 	
 	/**
 	 * Logistic Regression using Stochastic Gradient Descent 
 	 * (or Batch Gradient Descent)
 	 */
 	public LogRegressionSGD(int numFeatures) {
-		w = new double[numFeatures];
+		this(numFeatures, Variant.STOCHASTIC);
 	}
 	
-	public LogRegressionSGD(int numFeatures, boolean batch) {
+	public LogRegressionSGD(int numFeatures, Variant variant) {
 		w = new double[numFeatures];
-		this.batch = batch;
+		m = new double[numFeatures];
+		this.variant = variant;
 	}
 	
 	/**
@@ -38,26 +47,44 @@ public class LogRegressionSGD implements RegressionModel {
 	 */
 	public void train(double[][] x, double[] y) {
 		double[] gradient = new double[w.length];
-		if (batch) {
-			for (int i = 0; i < x.length; i++) {
-				double[] xPadded = RegressionModel.padBias(x[i]);
-				double[] update = MathUtils.scalarProduct(y[i], xPadded);
-				double exponent = y[i] * MathUtils.dotProduct(w, xPadded);
-				update = MathUtils.scalarProduct(1 / (1 + Math.exp(exponent)), update);
-				gradient = MathUtils.sumArrays(gradient, update);
-			}
-			gradient = MathUtils.scalarProduct(-1 / (double) x.length, gradient);
-			updateW(gradient);
-		} else {
-			for (int i = 0; i < x.length; i++) {
-				double[] xPadded = RegressionModel.padBias(x[i]);
-				double[] update = MathUtils.scalarProduct(y[i], xPadded);
-				double exponent = y[i] * MathUtils.dotProduct(w, xPadded);
-				update = MathUtils.scalarProduct(1 / (1 + Math.exp(exponent)), update);
-				gradient = MathUtils.sumArrays(gradient, update);
+		switch (variant) {
+			case BATCH:
+				for (int i = 0; i < x.length; i++) {
+					double[] xPadded = RegressionModel.padBias(x[i]);
+					double[] update = MathUtils.scalarProduct(y[i], xPadded);
+					double exponent = y[i] * MathUtils.dotProduct(w, xPadded);
+					update = MathUtils.scalarProduct(1 / (1 + Math.exp(exponent)), update);
+					gradient = MathUtils.sumArrays(gradient, update);
+				}
 				gradient = MathUtils.scalarProduct(-1 / (double) x.length, gradient);
 				updateW(gradient);
-			}
+				break;
+			case CONJUGATE:
+				break;
+			case MOMENTUM:
+				for (int i = 0; i < x.length; i++) {
+					double[] xPadded = RegressionModel.padBias(x[i]);
+					double[] update = MathUtils.scalarProduct(y[i], xPadded);
+					double exponent = y[i] * MathUtils.dotProduct(w, xPadded);
+					update = MathUtils.scalarProduct(1 / (1 + Math.exp(exponent)), update);
+					gradient = MathUtils.sumArrays(gradient, update);
+					gradient = MathUtils.scalarProduct(-1 / (double) x.length, gradient);
+					m = MathUtils.sumArrays(MathUtils.scalarProduct(GAMMA, m), gradient);
+					updateW(m);
+				}
+				break;
+			case NEWTONS_METHOD:
+				break;
+			default:	
+				for (int i = 0; i < x.length; i++) {
+					double[] xPadded = RegressionModel.padBias(x[i]);
+					double[] update = MathUtils.scalarProduct(y[i], xPadded);
+					double exponent = y[i] * MathUtils.dotProduct(w, xPadded);
+					update = MathUtils.scalarProduct(1 / (1 + Math.exp(exponent)), update);
+					gradient = MathUtils.sumArrays(gradient, update);
+					gradient = MathUtils.scalarProduct(-1 / (double) x.length, gradient);
+					updateW(gradient);
+				}
 		}
 	}
 	
@@ -77,6 +104,17 @@ public class LogRegressionSGD implements RegressionModel {
 	public double error(double h, double y) {
 		double s = Math.log(-h / (h - 1)); // logit function (inverse logistic)
 		return Math.log(1 + Math.exp(-y * s));
+	}
+	
+	public static double getError(LogRegressionSGD model, double[][] x, double[] y_t) {
+		double err = 0;
+		for (int i = 0; i < x.length; i++) {
+			double truth = y_t[i];
+			double estimate = model.eval(x[i]);			
+			err += model.error(estimate, truth);
+		}
+		
+		return err / x.length;		
 	}
 	
 	public static Map<String, Double> getStats(LogRegressionSGD model, double[][] x, double[] y_t) {             
@@ -138,14 +176,14 @@ public class LogRegressionSGD implements RegressionModel {
 		Labelset testSet = labelSets.get(1);
 		
 		System.out.println("Training Logistic Regression using Batch Gradient Descent...");
-		LogRegressionSGD model = new LogRegressionSGD(WisconsinBreastCancerData.NUM_FIELDS, true);		
+		LogRegressionSGD model = new LogRegressionSGD(WisconsinBreastCancerData.NUM_FIELDS, Variant.BATCH);		
 		for (int i = 1; i <= MAX_ITERATIONS; i++) {
 			model.train(trainSet.xs, trainSet.ys);			
 		}
 		System.out.println("\tTrain: "	+ getStats(model, trainSet.xs, trainSet.ys));	
 		System.out.println("\tTest : " + getStats(model, testSet.xs, testSet.ys));
 		
-		LogRegressionSGD sgd = new LogRegressionSGD(WisconsinBreastCancerData.NUM_FIELDS);				
+		LogRegressionSGD sgd = new LogRegressionSGD(WisconsinBreastCancerData.NUM_FIELDS, Variant.STOCHASTIC);				
 		System.out.println("Training Logistic Regression using Stochastic Gradient Descent...");
 		for (int i = 1; i <= MAX_ITERATIONS; i++) {
 			sgd.train(trainSet.xs, trainSet.ys);			
