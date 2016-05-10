@@ -55,7 +55,7 @@ public class OLSBiasVariance {
 			for (int j = 1; j < completeXs[i].length; j++) {
 				completeXs[i][j] = completeXs[i][0] * completeXs[i][j - 1];
 			}			
-			ys[i] = MathUtils.dotProduct(RegressionModel.padBias(completeXs[i]), trueWeights) + NOISE_STD * RANDOM.nextGaussian();
+			ys[i] = MathUtils.dotProduct(MathUtils.padBias(completeXs[i]), trueWeights) + NOISE_STD * RANDOM.nextGaussian();
 		}
 		
 		for (int i = 0; i < NUM_HOLDOUT; i++) {
@@ -64,7 +64,7 @@ public class OLSBiasVariance {
 			for (int j = 1; j < holdoutXs[i].length; j++) {
 				holdoutXs[i][j] = holdoutXs[i][0] * holdoutXs[i][j - 1];
 			}			
-			holdoutYs[i] = MathUtils.dotProduct(RegressionModel.padBias(holdoutXs[i]), trueWeights) + NOISE_STD * RANDOM.nextGaussian();
+			holdoutYs[i] = MathUtils.dotProduct(MathUtils.padBias(holdoutXs[i]), trueWeights) + NOISE_STD * RANDOM.nextGaussian();
 		}		
 		
 		DataTable var = new DataTable(Integer.class, Double.class);
