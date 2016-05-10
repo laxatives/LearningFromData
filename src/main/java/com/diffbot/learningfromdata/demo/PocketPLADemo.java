@@ -20,11 +20,11 @@ import de.erichseifert.gral.plots.points.PointRenderer;
  */
 
 public class PocketPLADemo {
-	private static final int DOF = 2;
-	private static final int NUM_EXAMPLES = 100;
+	private static final int DOF = 16;
+	private static final int NUM_EXAMPLES = 1024;
 	private static final int TEST_EXAMPLES = 1_000;
 	private static final int NUM_ITERATIONS = 1_000;
-	private static final int NUM_EXPERIMENTS = 20;
+	private static final int NUM_EXPERIMENTS = 8;
 	private static Random RANDOM = new Random();
 	
 	@SuppressWarnings("unchecked")

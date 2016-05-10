@@ -21,7 +21,7 @@ public class OLSRegression implements RegressionModel {
 	 * See https://inst.eecs.berkeley.edu/~ee127a/book/login/l_ols_ls_def.html
 	 */
 	public OLSRegression(double[][] x, double[] y_t) {
-		double[][] x_padded = RegressionModel.padBias(x);
+		double[][] x_padded = MathUtils.padBias(x);
 		
 		QRDecomp qr = MathUtils.qrDecompose(x_padded);
 		double[][] q_t = MathUtils.transpose(qr.Q);
@@ -38,7 +38,7 @@ public class OLSRegression implements RegressionModel {
 
 	@Override
 	public double eval(double[] x) {
-		return MathUtils.dotProduct(w, RegressionModel.padBias(x));
+		return MathUtils.dotProduct(w, MathUtils.padBias(x));
 	}
 	
 	@Override
