@@ -6,6 +6,7 @@ import java.util.List;
 
 import com.diffbot.learningfromdata.data.Data;
 import com.diffbot.learningfromdata.data.Data.Labelset;
+import com.diffbot.learningfromdata.utils.Utils;
 import com.diffbot.learningfromdata.data.MnistHandwrittenDigitData;
 
 public class NeuralNetwork {	
@@ -100,7 +101,6 @@ public class NeuralNetwork {
 	
 	private void backprop(double[] guess, double y) {
 		double[] output = guess;
-		double[] partialDerivatives;
 		for (int i = neurons.size() - 1; i >= 0; i--) {
 			List<Neuron> layer = neurons.get(i);
 
@@ -116,7 +116,7 @@ public class NeuralNetwork {
 		}
 	}
 	
-	// squared hinge loss
+	// square hinge loss
 	public static double loss(double[] output, double y) {
 		double loss = 0;
 		int correctIndex = (int) y;
@@ -124,11 +124,10 @@ public class NeuralNetwork {
 			if (i == correctIndex) {
 				continue;
 			}
-			loss += Math.pow(Math.max(0, output[i] - y + 1), 2);
+			loss += Math.pow(Math.max(0, 1 - output[i]), 2);
 		}
 		return loss;
 	}
-	
 	
 	private static final int MAX_ITERATIONS = 200;
 	private static final Double HOLDOUT_PERCENTAGE = 0.1;
@@ -151,7 +150,7 @@ public class NeuralNetwork {
 			double y = testSet.ys[i];
 			
 			double[] guess = nn.eval(x);
-			loss += loss(guess, y);
+			System.out.println("" + loss(guess, y) + " = " +y + ": " +  Utils.arrayToString(x));
 		}
 		System.out.println("Average loss: " + loss / (float) testSet.xs.length);
 	}

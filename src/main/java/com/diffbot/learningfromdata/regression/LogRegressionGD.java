@@ -7,6 +7,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.TreeMap;
 
 import com.diffbot.learningfromdata.data.Data;
@@ -20,6 +21,7 @@ public class LogRegressionGD implements RegressionModel {
 	private static final double GAMMA = 0.1; // momentum parameter
 	// TODO: this should be a function of u and g
 	private static final double BETA = 0.01; // conjugate parameter
+	private static final Random RANDOM = new Random();
 	
 	final public Variant variant; 
 	public double[] w;
@@ -99,9 +101,10 @@ public class LogRegressionGD implements RegressionModel {
 				break;
 			default:	
 				for (int i = 0; i < x.length; i++) {
-					double[] xPadded = MathUtils.padBias(x[i]);
-					double[] update = MathUtils.scalarProduct(y[i], xPadded);
-					double exponent = y[i] * MathUtils.dotProduct(w, xPadded);
+					int randInd = RANDOM.nextInt(x.length);
+					double[] xPadded = MathUtils.padBias(x[randInd]);
+					double[] update = MathUtils.scalarProduct(y[randInd], xPadded);
+					double exponent = y[randInd] * MathUtils.dotProduct(w, xPadded);
 					update = MathUtils.scalarProduct(1 / (1 + Math.exp(exponent)), update);
 					gradient = MathUtils.sumArrays(gradient, update);
 					gradient = MathUtils.scalarProduct(-1 / (double) x.length, gradient);
