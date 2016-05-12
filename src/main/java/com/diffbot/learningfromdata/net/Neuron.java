@@ -4,6 +4,9 @@ import java.util.Random;
 
 import com.diffbot.learningfromdata.utils.MathUtils;
 
+/**
+ * Warning: NOT thread safe
+ */
 public class Neuron {	
 	private static final Double INIT_WEIGHT = 1e-3;
 	private static final double ETA = 0.1; // learning parameter
