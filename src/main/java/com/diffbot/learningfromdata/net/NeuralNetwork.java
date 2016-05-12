@@ -24,6 +24,29 @@ public class NeuralNetwork {
 				return 1 - Math.pow(Math.tanh(x), 2);
 			}
 		},
+		// from LeCun, Generalization and network design strategies
+		SCALED_TANH {
+			@Override
+			public double eval(double x) {
+				return 1.7159 * Math.tanh(2 * x / 3.0);
+			}
+			@Override
+			public double derivative(double x) {
+				return 1.14393 * (1 - Math.pow(Math.tanh(2 * x / 3.0), 2)); 
+			}			
+		},
+		// from LeCun, Efficient Back-prop
+		TANH_PLUS_LINEAR {
+			private static final double a = 0.01;
+			@Override
+			public double eval(double x) {
+				return Math.tanh(x) + a * x;
+			}
+			@Override
+			public double derivative(double x) {
+				return 1 - Math.pow(Math.tanh(x), 2) + a;
+			}
+		},
 		RELU {
 			@Override
 			public double eval(double x) {
