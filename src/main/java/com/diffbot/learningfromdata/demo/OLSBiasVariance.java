@@ -25,7 +25,7 @@ public class OLSBiasVariance {
 
 	// decent settings: {64, 128, N/10, 2, 1, 0.5, 3)
 	// {16, 1024, N/4, 0.01, 1, 0.5, ANY)
-	private static final int MAX_DOF = 8;
+	private static final int MAX_DOF = 16;
 	private static final int NUM_EXAMPLES = 128;
 	private static final int NUM_HOLDOUT = NUM_EXAMPLES / 10;
 	private static final double NOISE_STD = 2;

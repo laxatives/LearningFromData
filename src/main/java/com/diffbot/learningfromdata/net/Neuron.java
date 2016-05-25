@@ -8,7 +8,6 @@ import com.diffbot.learningfromdata.utils.MathUtils;
  * Warning: NOT thread safe
  */
 public class Neuron {	
-	private static final Double INIT_WEIGHT = 1e-3;
 	private static final double ETA = 0.1; // learning parameter
 	private static Random RANDOM = new Random();
 	
@@ -20,8 +19,9 @@ public class Neuron {
 	 */
 	public Neuron(int numFeatures) {
 		w = new double[numFeatures + 1];
+		double std = Math.pow(numFeatures, -0.5); // from LeCun, Efficient Back-prop
 		for (int i = 1; i < w.length; i++) {
-			w[i] = INIT_WEIGHT * RANDOM.nextGaussian();
+			w[i] = std * RANDOM.nextGaussian();
 		}
 	}
 	
@@ -33,6 +33,7 @@ public class Neuron {
 	public void updateW(double[] gradient) {
 		// TODO: support momentum, conjugate descent
 		gradient = MathUtils.scalarProduct(-ETA, gradient);
+		System.out.println("" + w.length + "," + gradient.length);
 		w = MathUtils.sumArrays(w, gradient);
 	}
 
