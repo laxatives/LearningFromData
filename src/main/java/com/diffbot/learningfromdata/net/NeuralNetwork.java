@@ -3,76 +3,18 @@ package com.diffbot.learningfromdata.net;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 import com.diffbot.learningfromdata.data.Data;
 import com.diffbot.learningfromdata.data.Data.Labelset;
+import com.diffbot.learningfromdata.utils.MathUtils;
 import com.diffbot.learningfromdata.utils.Utils;
 import com.diffbot.learningfromdata.data.MnistHandwrittenDigitData;
 
 public class NeuralNetwork {	
-	private List<List<Neuron>> neurons = new ArrayList<>();
+	private List<Layer> layers = new ArrayList<>();
 	private ActivationFunction f;
-	
-	public enum ActivationFunction {
-		TANH {
-			@Override
-			public double eval(double x) {
-				return Math.tanh(x);
-			}
-			@Override
-			public double derivative(double x) {
-				return 1 - Math.pow(Math.tanh(x), 2);
-			}
-		},
-		// from LeCun, Generalization and network design strategies
-		SCALED_TANH {
-			@Override
-			public double eval(double x) {
-				return 1.7159 * Math.tanh(2 * x / 3.0);
-			}
-			@Override
-			public double derivative(double x) {
-				return 1.14393 * (1 - Math.pow(Math.tanh(2 * x / 3.0), 2)); 
-			}			
-		},
-		// from LeCun, Efficient Back-prop
-		TANH_PLUS_LINEAR {
-			private static final double a = 0.01;
-			@Override
-			public double eval(double x) {
-				return Math.tanh(x) + a * x;
-			}
-			@Override
-			public double derivative(double x) {
-				return 1 - Math.pow(Math.tanh(x), 2) + a;
-			}
-		},
-		RELU {
-			@Override
-			public double eval(double x) {
-				return Math.max(0, x);
-			}
-
-			@Override
-			public double derivative(double x) {
-				return x < 0 ? 0 : 1;
-			}
-		},
-		LEAKY_RELU {
-			private static final double a = 0.01;
-			@Override
-			public double eval(double x) {
-				return x < 0 ? a * x : x; 
-			}
-			@Override
-			public double derivative(double x) {
-				return x < 0 ? a : 1;
-			}
-		};
-		public abstract double eval(double x);
-		public abstract double derivative(double x);
-	}
-	
+		
 	public NeuralNetwork(int[] shape) {
 		this(shape, ActivationFunction.RELU);
 	}
@@ -82,100 +24,124 @@ public class NeuralNetwork {
 	 */
 	public NeuralNetwork(int[] shape, ActivationFunction f) {
 		this.f = f;
-		int inputSize = 1;
+		int inputSize = shape[0];
 		for (int dim : shape) {
-			List<Neuron> layer = new ArrayList<>();
-			
-			for (int neuronIdx = 0; neuronIdx < dim; neuronIdx++) {				
-				layer.add(new Neuron(inputSize));
-			}
-
-			neurons.add(layer);
+			// TODO: use Radial basis function in final layer
+			layers.add(new Layer(dim, inputSize));
 			inputSize = dim;
+		}
+		
+	}
+	
+	private static final int BATCH_SIZE = 256;
+	private static final Random RANDOM = new Random();
+	
+	// this is not thread safe
+	public void setup(double[][] xs, double[] ys) {
+		for (int i = 0; i < BATCH_SIZE; i++) {
+			int ind = RANDOM.nextInt(xs.length);
+			double[] x = xs[ind];
+			int y = (int) ys[ind];
+			double[] guess = forward(x);	
+			
+			backward(x, guess, y);
 		}
 	}
 	
-	public double[] eval(double[] x) {
+	public double[] forward(double[] x) {
 		double[] input = x;
-		for (int i = 0; i < neurons.size(); i++) {
-			List<Neuron> layer = neurons.get(i);			
-			double[] output = new double[layer.size()];
-			
-			for (int j = 0; j < output.length; j++) {
-				output[j] = f.eval(layer.get(j).dotProduct(input));
-			}
-			
-			input = output;
+		for (int i = 0; i < layers.size(); i++) {
+			Layer layer = layers.get(i);	
+			input = layer.forward(input, f);
 		}
 		
 		return input;
 	}
 	
-	public void train(double[][] xs, double[] ys) {
-		for (int i = 0; i < xs.length; i++) {
-			// TODO: use minibatch
-			double[] x = xs[i];
-			double y = ys[i];
-			double[] guess = eval(x);	
-			
-			backprop(guess, y);
-		}
-	}
-	
-	private void backprop(double[] guess, double y) {
-		double[] output = guess;
-		for (int i = neurons.size() - 1; i >= 0; i--) {
-			List<Neuron> layer = neurons.get(i);
+	private void backward(double[] x, double[] guess, int y) {		
+		Layer outputLayer = layers.get(layers.size() - 1);
+		double[] correctLabelWeight = outputLayer.getNeuron(y).w;	
 
-			double[] input = new double[layer.size()];
-			
-			for (int j = 0; j < input.length; j++) {
-				Neuron neuron = layer.get(j);
-				double[] gradient = null; // need edge values from forward pass
-				input[j] = f.derivative(layer.get(j).dotProduct(output));
+		Layer prevLayer = layers.get(layers.size() - 2);
+		double[] input = prevLayer.outputs();
+		input = MathUtils.padBias(input);
+				
+		// compute gradient using last layer output and prev layer inputs
+		double[] gradients = new double[outputLayer.size];
+		for (int i = 0; i < outputLayer.size; i++) {
+			Neuron neuron = outputLayer.getNeuron(i);
+			double gradient = grad(input , neuron.w, correctLabelWeight);
+			if (Double.isNaN(gradient)) {
+				System.out.println("Gradient NaN");
+				break;
 			}
+			neuron.updateW(MathUtils.scalarProduct(f.derivative(neuron.val), MathUtils.scalarProduct(gradient, input)));
 			
-			output = input;
+			gradients[i] = gradient;
+		}
+		
+		for (int i = layers.size() - 2; i >= 0; i--) {						
+			Layer topLayer = layers.get(i + 1);			
+			Layer bottomLayer = layers.get(i);
+			double[] inputs = i > 0 ? layers.get(i - 1).outputs() : x;
+			gradients = bottomLayer.backward(gradients, topLayer, inputs, f);
 		}
 	}
 	
-	// square hinge loss
-	public static double loss(double[] output, double y) {
-		double loss = 0;
-		int correctIndex = (int) y;
+	// hinge-loss
+	// TODO: try square hinge, cross-entry (soft-max), other loss functions
+	public static double loss(double[] output, int y) {
+		double correctLabelOutput = output[y];
+		double totalLoss = 0;
 		for (int i = 0; i < output.length; i++) {
-			if (i == correctIndex) {
+			if (i == y) {
 				continue;
 			}
-			loss += Math.pow(Math.max(0, 1 - output[i]), 2);
+			totalLoss += Math.max(0, output[i] - correctLabelOutput + 1);
 		}
-		return loss;
+		return totalLoss;
 	}
 	
-	private static final int MAX_ITERATIONS = 200;
+	public static double grad(double[] input, double[] w, double[] correctLabelWeights) {
+		if (MathUtils.dotProduct(w, input) - MathUtils.dotProduct(correctLabelWeights, input) > 1)  {
+			return 0;
+		}
+		return 1;
+	}
+
+	
+	private static final int MAX_ITERATIONS = 1;
 	private static final Double HOLDOUT_PERCENTAGE = 0.1;
 	
-	public static void main(String[] args) throws IOException {
-		List<Labelset> labelSets = Data.split(new MnistHandwrittenDigitData().getLabelset(), HOLDOUT_PERCENTAGE);
-		Labelset trainSet = labelSets.get(0);
-		Labelset testSet = labelSets.get(1);
+	public static void main(String[] args) {
+//		List<Labelset> labelSets = Data.split(new MnistHandwrittenDigitData().getLabelset(), HOLDOUT_PERCENTAGE);
+//		Labelset trainSet = labelSets.get(0);
+//		Labelset testSet = labelSets.get(1);			
 		
-		// 2 hidden layers of input size
-		int[] shape = new int[]{MnistHandwrittenDigitData.NUM_FIELDS, MnistHandwrittenDigitData.NUM_FIELDS, MnistHandwrittenDigitData.NUM_FIELDS, 10};
+//		int[] shape = new int[]{MnistHandwrittenDigitData.NUM_FIELDS, MnistHandwrittenDigitData.NUM_FIELDS, 10};
+		int[] shape = new int[]{2, 2};
+		
+		// logical OR
+		double[][] xs = new double[][] {{1, 0}, {1, 1}, {0, 0}, {0, 1}, {1, 1}, {0, 0}};
+		double[] ys = new double[] {1, 1, 0, 1, 1, 0};
+		
 		NeuralNetwork nn = new NeuralNetwork(shape);
+		
+		
 		for (int i = 1; i <= MAX_ITERATIONS; i++) {
-			nn.train(trainSet.xs, trainSet.ys);			
+			nn.setup(xs, ys);			
 		}
 		
 		double loss = 0;
-		for (int i = 0; i < testSet.xs.length; i++) {
-			double[] x = testSet.xs[i];
-			double y = testSet.ys[i];
+		for (int i = 0; i < xs.length; i++) {
+			double[] x = xs[i];
+			int y = (int) ys[i];			
 			
-			double[] guess = nn.eval(x);
-			System.out.println("" + loss(guess, y) + " = " +y + ": " +  Utils.arrayToString(x));
+			double[] guess = nn.forward(x);
+			loss += loss(guess, y);
 		}
-		System.out.println("Average loss: " + loss / (float) testSet.xs.length);
+		loss /= xs.length;
+		System.out.println("Hinge loss: " + loss);
 	}
 
 }

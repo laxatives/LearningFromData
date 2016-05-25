@@ -15,8 +15,8 @@ public class MathUtils {
 	}	
 			
 	public static double dotProduct(double[] xs1, double[] xs2) {
-		double product = 0;		
-		for (int i = 0; i < xs1.length; i++) {
+		double product = 0;
+		for (int i = 0; i < xs1.length; i++) {			
 			product += xs1[i] * xs2[i];
 		}
 		return product;

@@ -91,11 +91,12 @@ public class LogRegressionGD implements RegressionModel {
 					double exponent = y[i] * MathUtils.dotProduct(w, xPadded);
 					update = MathUtils.scalarProduct(1 / (1 + Math.exp(exponent)), update);
 					gradient = MathUtils.sumArrays(gradient, update);
-					gradient = MathUtils.scalarProduct(-1 / (double) x.length, gradient);
-					// TODO: compute gamma
-					m = MathUtils.sumArrays(MathUtils.scalarProduct(GAMMA, m), gradient);
-					updateW(m);
+
 				}
+				gradient = MathUtils.scalarProduct(-1 / (double) x.length, gradient);
+				// TODO: compute gamma
+				m = MathUtils.sumArrays(MathUtils.scalarProduct(GAMMA, m), gradient);
+				updateW(m);
 				break;
 			case NEWTONS_METHOD:
 				break;
