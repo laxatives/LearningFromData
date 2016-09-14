@@ -7,7 +7,7 @@ import com.diffbot.learningfromdata.utils.MathUtils;
 /**
  * Warning: NOT thread safe
  */
-public class Neuron {	
+public class NeuronOld {	
 	private static final double ETA = 0.1; // learning parameter
 	private static Random RANDOM = new Random();
 	
@@ -17,7 +17,7 @@ public class Neuron {
 	/**
 	 * Init weights to small numbers drawn from gaussian, bias = 0.
 	 */
-	public Neuron(int numFeatures) {
+	public NeuronOld(int numFeatures) {
 		w = new double[numFeatures + 1];
 		double std = Math.pow(numFeatures, -0.5); // from LeCun, Efficient Back-prop
 		for (int i = 1; i < w.length; i++) {
@@ -26,8 +26,7 @@ public class Neuron {
 	}
 	
 	public double dotProduct(double[] x) {
-		val = MathUtils.dotProduct(w, MathUtils.padBias(x));
-		return val;
+		return MathUtils.dotProduct(w, MathUtils.padBias(x));
 	}
 	
 	public void updateW(double[] gradient) {

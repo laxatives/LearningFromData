@@ -5,28 +5,28 @@ import java.util.List;
 
 import com.diffbot.learningfromdata.utils.MathUtils;
 
-public class Layer {
+public class LayerOld {
 	private static final double THRESHOLD = 1e-6; 
 	
 	public final int size;
-	private final List<Neuron> neurons = new ArrayList<>();
+	private final List<NeuronOld> neurons = new ArrayList<>();
 	
 	// TODO: allow variable number connections, neuron type (ie RBF)
-	public Layer(int size, int inputSize) {
+	public LayerOld(int size, int inputSize) {
 		this.size = size;
 		for (int i = 0; i < size; i++) {				
-			neurons.add(new Neuron(inputSize));
+			neurons.add(new NeuronOld(inputSize));
 		}
 	}
 	
-	public Neuron getNeuron(int i) {
+	public NeuronOld getNeuron(int i) {
 		return neurons.get(i);
 	}
 	
 	public double[] forward(double[] x, ActivationFunction f) {
 		double[] output = new double[size];
 		for (int i = 0; i < output.length; i++) {
-			Neuron neuron = neurons.get(i);
+			NeuronOld neuron = neurons.get(i);
 			double val = f.eval(neuron.dotProduct(x));
 			
 			output[i] = val;
@@ -42,16 +42,16 @@ public class Layer {
 	public double[] outputs() {
 		double[] output = new double[size];
 		for (int i = 0; i < size; i++) {
-			Neuron neuron = neurons.get(i);
+			NeuronOld neuron = neurons.get(i);
 			output[i] = neuron.val;
 		}
 		return output;
 	}
 	
-	public double[] backward(double[] topLayerGradients, Layer topLayer, double[] input, ActivationFunction f) {
+	public double[] backward(double[] topLayerGradients, LayerOld topLayer, double[] input, ActivationFunction f) {
 		double[] bottomLayerGradients = new double[size];		
 		for (int i = 0; i < size; i++) {
-			Neuron neuron = neurons.get(i);
+			NeuronOld neuron = neurons.get(i);
 			double df = f.derivative(neuron.val);
 			if (Math.abs(df) < THRESHOLD) {
 				continue;
@@ -59,7 +59,7 @@ public class Layer {
 			
 			double gradient = 0;
 			for (int k = 0; k < topLayer.size; k++) {
-				Neuron nextNeuron = topLayer.getNeuron(k);				
+				NeuronOld nextNeuron = topLayer.getNeuron(k);				
 				gradient += nextNeuron.w[i + 1] * topLayerGradients[k];
 			}
 			
