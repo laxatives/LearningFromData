@@ -57,6 +57,8 @@ public enum ActivationFunction {
 			return x < 0 ? a : 1;
 		}
 	};
+    
+    // TODO: add maxout, elu
 	
 	public abstract double eval(double x);
 	public abstract double derivative(double x);
