@@ -1,19 +1,24 @@
 package com.diffbot.learningfromdata.net.layer;
 
+import com.diffbot.learningfromdata.net.ActivationFunction;
+
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public abstract class Layer {
     public final int inputSize;
     public final int outputSize;
     protected final float learningParam;
+    protected final ActivationFunction activationFunction;
     
     protected List<Neuron> neurons = new ArrayList<>();
     
-    public Layer(int inputSize, int outputSize, float learningParam) {
+    public Layer(int inputSize, int outputSize, float learningParam, ActivationFunction activationFunction) {
         this.inputSize = inputSize;
         this.outputSize = outputSize;
         this.learningParam = learningParam;
+        this.activationFunction = activationFunction;
     }
     
     public List<Float> forward(List<Float> inputs) {
@@ -21,10 +26,9 @@ public abstract class Layer {
             throw new IllegalArgumentException("Expected " + inputSize + " inputs. Got " + inputs.size());
         }
 
-        List<Float> results = new ArrayList<>();
-        for (Neuron n : neurons) {
-            results.add(n.forward(inputs));
-        }
+        List<Float> results = neurons.stream()
+                .map(n -> activationFunction.eval(n.forward(inputs)))
+                .collect(Collectors.toList());
 
         return results;
     }
@@ -41,8 +45,13 @@ public abstract class Layer {
         
         for (Neuron n : neurons) {
             List<Float> localGradients = n.backward(nextLayerGradients);
+            if (localGradients.size() != inputSize) {
+                throw new IllegalArgumentException("Expected " + inputSize + " local gradients. Got " + localGradients.size());
+            }
+            
+            // add to the gradient of each input for each neuron in this layer
             for (int i = 0; i < localGradients.size(); i++) {
-                gradients.set(i, gradients.get(i) + localGradients.get(i));
+                gradients.set(i, gradients.get(i) + activationFunction.derivative(localGradients.get(i)));
             }
         }
         
@@ -58,5 +67,14 @@ public abstract class Layer {
         }
         
         return true;
+    }
+    
+    public String debug() {
+        StringBuilder debug = new StringBuilder();
+        debug.append("\tLayer:\n");
+        for (Neuron n : neurons) {
+            debug.append(n.debug());
+        }
+        return debug.toString();
     }
 }
