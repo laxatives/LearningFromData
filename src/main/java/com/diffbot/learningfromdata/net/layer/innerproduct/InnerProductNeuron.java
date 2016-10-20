@@ -1,5 +1,6 @@
 package com.diffbot.learningfromdata.net.layer.innerproduct;
 
+import com.diffbot.learningfromdata.net.ActivationFunction;
 import com.diffbot.learningfromdata.net.layer.Neuron;
 
 import java.util.ArrayList;
@@ -10,8 +11,8 @@ public class InnerProductNeuron extends Neuron {
     private List<Float> weights = new ArrayList<>();
     private float bias;
     
-    public InnerProductNeuron(int inputSize, float learningParam, float initWeightRange) {
-        super(inputSize, learningParam);   
+    public InnerProductNeuron(int inputSize, ActivationFunction activationFunction, float learningParam, float initWeightRange) {
+        super(inputSize, activationFunction, learningParam);
         for (int i = 0; i < inputSize; i++) {
             weights.add(initWeight(initWeightRange));
         }
@@ -31,7 +32,7 @@ public class InnerProductNeuron extends Neuron {
             result += input.get(i) * weights.get(i);
         }
         result -= bias;
-        return result;
+        return activationFunction.eval(result);
     }
     
     /**
@@ -55,12 +56,12 @@ public class InnerProductNeuron extends Neuron {
             if (i < savedInput.size()) {
                 // contribute to the weight gradient
                 for (float nextLayerGradient : nextLayerGradients) {
-                    gradients.set(i, gradients.get(i) + nextLayerGradient * savedInput.get(i));
+                    gradients.set(i, gradients.get(i) + activationFunction.derivative(nextLayerGradient * savedInput.get(i)));
                 }
             } else {
                 // contribute to the bias gradient (always has input value 1)
                 for (float nextLayerGradient : nextLayerGradients) {
-                    gradients.set(i, gradients.get(i) + nextLayerGradient);
+                    gradients.set(i, gradients.get(i) + activationFunction.derivative(nextLayerGradient));
                 }
             }
         }

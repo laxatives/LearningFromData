@@ -98,7 +98,7 @@ public class NeuralNetwork {
         NeuralNetwork network = new NeuralNetwork();
         int inputSize = 2;
         int outputSize = 2;
-        float learningParam = 1e-3f;
+        float learningParam = 1e-4f;
         
         network.layers.add(new InnerProductLayer(inputSize, outputSize, ActivationFunction.RELU, learningParam));
         System.out.println(network.debug());
