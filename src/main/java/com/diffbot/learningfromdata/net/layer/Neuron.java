@@ -14,7 +14,6 @@ public abstract class Neuron {
         this.learningParam = learningParam;
     }
         
-        
     public float forward(List<Float> input) {
         if (input.size() != inputSize) {
             throw new IllegalArgumentException("Expected " + inputSize + " inputs. Got " + input.size());
@@ -26,12 +25,12 @@ public abstract class Neuron {
         
     public abstract float doForward(List<Float> input);
         
-    public List<Float> backward(List<Float> gradients) {
-        savedGradients = doBackward(gradients);
+    public List<Float> backward(List<Float> nextLayerGradients) {
+        savedGradients = doBackward(nextLayerGradients);
         return savedGradients;
     }
         
-    public abstract List<Float> doBackward(List<Float> gradients);
+    public abstract List<Float> doBackward(List<Float> nextLayerGradients);
         
     public boolean update() {
         if (savedGradients == null) {
@@ -41,4 +40,6 @@ public abstract class Neuron {
     }
         
     public abstract boolean doUpdate(List<Float> gradient);
+    
+    public abstract String debug();
 }

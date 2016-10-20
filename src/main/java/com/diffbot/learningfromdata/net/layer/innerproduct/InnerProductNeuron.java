@@ -1,10 +1,10 @@
 package com.diffbot.learningfromdata.net.layer.innerproduct;
 
+import com.diffbot.learningfromdata.net.layer.Neuron;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
-
-import com.diffbot.learningfromdata.net.layer.Neuron;
 
 public class InnerProductNeuron extends Neuron {
     private List<Float> weights = new ArrayList<>();
@@ -30,69 +30,43 @@ public class InnerProductNeuron extends Neuron {
         for (int i = 0; i < weights.size(); i++) {
             result += input.get(i) * weights.get(i);
         }
-        result += bias;
+        result -= bias;
         return result;
     }
     
     /**
-     * Don't pass the last gradient (used for bias) to the next layer.
+     * Don't pass the last gradient (used for bias) to the previous layer.
      */
     @Override
-    public List<Float> backward(List<Float> gradients) {
-        savedGradients = doBackward(gradients);
-        List<Float> passedGradients = savedGradients.subList(0, savedGradients.size() - 1);
-            
-        gradientCheck(passedGradients);
-            
-        return passedGradients;
+    public List<Float> backward(List<Float> nextLayerGradients) {
+        savedGradients = doBackward(nextLayerGradients);
+        return savedGradients.subList(0, savedGradients.size() - 1);           
     }
 
     @Override
-    public List<Float> doBackward(List<Float> errors) {
+    public List<Float> doBackward(List<Float> nextLayerGradients) {
         // init gradients to 0 (one for each weight parameter + one for bias)
         List<Float> gradients = new ArrayList<>();                
         for (int i = 0; i < weights.size() + 1; i++) {
             gradients.add(0f);
         }
-            
-        // for each error (one for each neuron in the following layer)
-        for (float err : errors) {
-            // contribute to the weight gradient
-            for (int i = 0; i < savedInput.size(); i++) {
-                gradients.set(i, gradients.get(i) + err * savedInput.get(i));
-            }
-            // contribute to the bias gradient
-            gradients.set(weights.size(), gradients.get(weights.size()) + err);
-        }                                
-            
-        return gradients;                                
-    }
         
-    private static final float DELTA = 1e-5f;
-    private static final float THRESHOLD = 1e-3f;
-        
-    private void gradientCheck(List<Float> gradients) {                
-        for (int i = 0; i < gradients.size(); i++) {
-            List<Float> shiftedLeft = new ArrayList<>();
-            List<Float> shiftedRight = new ArrayList<>();
-            for (int j = 0; j < savedInput.size(); j++) {
-                if (i == j) {
-                    shiftedLeft.add(savedInput.get(j) - DELTA);
-                    shiftedRight.add(savedInput.get(j) + DELTA);
-                } else {
-                    shiftedLeft.add(savedInput.get(j));
-                    shiftedRight.add(savedInput.get(j));
+        for (int i = 0; i < weights.size() + 1; i++) {
+            if (i < savedInput.size()) {
+                // contribute to the weight gradient
+                for (float nextLayerGradient : nextLayerGradients) {
+                    gradients.set(i, gradients.get(i) + nextLayerGradient * savedInput.get(i));
+                }
+            } else {
+                // contribute to the bias gradient (always has input value 1)
+                for (float nextLayerGradient : nextLayerGradients) {
+                    gradients.set(i, gradients.get(i) + nextLayerGradient);
                 }
             }
-            float resultLeft = doForward(shiftedLeft);
-            float resultRight = doForward(shiftedRight);
-            float numericGradient = (resultRight - resultLeft) / (2 * DELTA);                    
-            if (Math.abs(gradients.get(i) - numericGradient) > THRESHOLD) {
-                System.out.println(gradients + ", " + i);
-                throw new IllegalStateException("Failed gradient check: gradient=" + gradients.get(i) + " != numericGradient=" + numericGradient);
-            }
         }
-    }
+            
+        return gradients;                                
+    } 
 
     @Override
     public boolean doUpdate(List<Float> gradients) {
@@ -103,5 +77,10 @@ public class InnerProductNeuron extends Neuron {
         bias -= learningParam * gradients.get(weights.size());
             
         return true;
+    }
+    
+    @Override
+    public String debug() {
+        return "\t\t" + weights.toString() + "; " + bias + "\n";
     }
 }
