@@ -27,7 +27,7 @@ public abstract class Layer {
         }
 
         List<Float> results = neurons.stream()
-                .map(n -> activationFunction.eval(n.forward(inputs)))
+                .map(n -> n.forward(inputs))
                 .collect(Collectors.toList());
 
         return results;

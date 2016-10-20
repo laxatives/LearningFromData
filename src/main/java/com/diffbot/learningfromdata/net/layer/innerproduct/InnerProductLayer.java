@@ -9,7 +9,7 @@ public class InnerProductLayer extends Layer {
         for (int i = 0; i < outputSize; i++) {
             // TODO: add a node for bias? currently handled in InnerProductNeuron instead
             // TODO: use 2/(inputSize + outputSize) as init weights
-            neurons.add(new InnerProductNeuron(inputSize, learningParam, 1e-2f));
+            neurons.add(new InnerProductNeuron(inputSize, activationFunction, learningParam, 1e-2f));
         }
     }
 }
