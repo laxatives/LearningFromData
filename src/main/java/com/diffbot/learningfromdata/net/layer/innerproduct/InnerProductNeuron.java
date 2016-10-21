@@ -32,11 +32,11 @@ public class InnerProductNeuron extends Neuron {
             result += input.get(i) * weights.get(i);
         }
         result -= bias;
-        return activationFunction.eval(result);
+        return result;
     }
     
     /**
-     * Don't pass the last gradient (used for bias) to the previous layer.
+     * Don't pass the last gradient (bias) to the previous layer.
      */
     @Override
     public List<Float> backward(List<Float> nextLayerGradients) {
@@ -56,17 +56,17 @@ public class InnerProductNeuron extends Neuron {
             if (i < savedInput.size()) {
                 // contribute to the weight gradient
                 for (float nextLayerGradient : nextLayerGradients) {
-                    gradients.set(i, gradients.get(i) + activationFunction.derivative(nextLayerGradient * savedInput.get(i)));
+                    gradients.set(i, gradients.get(i) + nextLayerGradient * savedInput.get(i));
                 }
             } else {
                 // contribute to the bias gradient (always has input value 1)
                 for (float nextLayerGradient : nextLayerGradients) {
-                    gradients.set(i, gradients.get(i) + activationFunction.derivative(nextLayerGradient));
+                    gradients.set(i, gradients.get(i) + nextLayerGradient);
                 }
             }
         }
-            
-        return gradients;                                
+
+        return gradients;
     } 
 
     @Override

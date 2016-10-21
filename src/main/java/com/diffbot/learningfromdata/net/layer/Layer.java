@@ -26,11 +26,9 @@ public abstract class Layer {
             throw new IllegalArgumentException("Expected " + inputSize + " inputs. Got " + inputs.size());
         }
 
-        List<Float> results = neurons.stream()
-                .map(n -> n.forward(inputs))
+        return neurons.stream()
+                .map(n -> activationFunction.eval(n.forward(inputs)))
                 .collect(Collectors.toList());
-
-        return results;
     }
     
     public List<Float> backward(List<Float> nextLayerGradients) {        
@@ -51,11 +49,13 @@ public abstract class Layer {
             
             // add to the gradient of each input for each neuron in this layer
             for (int i = 0; i < localGradients.size(); i++) {
-                gradients.set(i, gradients.get(i) + activationFunction.derivative(localGradients.get(i)));
+                gradients.set(i, gradients.get(i) + localGradients.get(i));
             }
         }
-        
-        return gradients;
+
+        return gradients.stream()
+                .map(activationFunction::derivative)
+                .collect(Collectors.toList());
     }
     
     public boolean update() {

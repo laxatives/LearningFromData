@@ -27,13 +27,14 @@ public class NeuralNetwork {
         for (int i = 0; i < results.size(); i++) {
             gradients.add(0f);
         }
-        
+
         for (int i = 0; i < results.size(); i++) {
             if (i == correctIndex) {
                 continue;
             } else if (results.get(i) - results.get(correctIndex) + 1 > 0) {
-                gradients.set(i, 1f);
-                gradients.set(correctIndex, gradients.get(correctIndex) - 1f);
+                gradients.set(i, -1f);
+                // TODO: should this boost the output of the correctIndex? or only decrease the output of the wrong indices?
+//                gradients.set(correctIndex, gradients.get(correctIndex) + 1f);
             }
         }
         ListIterator<Layer> li = layers.listIterator(layers.size());
@@ -62,43 +63,12 @@ public class NeuralNetwork {
         return sb.toString();
     }
     
-    // TODO: move to error function package
-    public static float svmError(List<Float> results, int correctIndex) {
-        if (correctIndex >= results.size()) {
-            throw new IllegalArgumentException("Cannot have correctIndex " + correctIndex + " for results " + results);
-        }
-        float err = 0;
-        for (int i = 0; i < results.size(); i++) {
-            if (i == correctIndex) {
-                continue;
-            }
-            err += Math.max(0, results.get(i) - results.get(correctIndex) + 1);
-        }
-        
-        return err;
-    }
-    
-    public static float softMaxError(List<Float> results, int correctIndex) {
-        if (correctIndex >= results.size()) {
-            throw new IllegalArgumentException("Cannot have correctIndex " + correctIndex + " for results " + results);
-        }
-        float err = 0;
-        for (int i = 0; i < results.size(); i++) {
-            if (i == correctIndex) {
-                continue;
-            }
-            err += Math.max(0, results.get(i) - results.get(correctIndex) + 1);
-        }
-        
-        return err;
-    }
-    
     public static void main(String[] args) {        
         // init network
         NeuralNetwork network = new NeuralNetwork();
         int inputSize = 2;
         int outputSize = 2;
-        float learningParam = 1e-4f;
+        float learningParam = 1e-3f;
         
         network.layers.add(new InnerProductLayer(inputSize, outputSize, ActivationFunction.RELU, learningParam));
         System.out.println(network.debug());
@@ -110,29 +80,29 @@ public class NeuralNetwork {
         
         inputs.add(Lists.newArrayList(-1f, 1f));
         labels.add(1);
-//        
+
 //        inputs.add(Lists.newArrayList(0f, 1f));
 //        labels.add(1);
-//
+
         inputs.add(Lists.newArrayList(1f, -1f));
         labels.add(0);
-//        
+
 //        inputs.add(Lists.newArrayList(1f, 0f));
 //        labels.add(0);
         
         // train
-        for (int i = 0; i < 200_000; i++) {
+        for (int i = 0; i < 500_000; i++) {
             for (int j = 0; j < inputs.size(); j++) {          
                 List<Float> input = inputs.get(j);
                 int label = labels.get(j);
                 
                 List<Float> results = network.forward(input);
-                float err = svmError(results, label);
+                float err = LossFunction.SOFT_MAX.classificationError(results, label);
                 if (Float.isNaN(err)) {
                     throw new IllegalStateException("NaN error at iteration " + i);
                 }
                 
-                if (i % 10_000 == 0) System.out.println(i + "\tsvm err @" + j +": " + err);
+                if (i % 100_000 == 0) System.out.println(i + "\tsvm err @" + j +": " + err);
                 network.backward(results, label);
                 if (!network.update()) {
                     throw new RuntimeException("Unexpected error in network update.");
@@ -149,7 +119,7 @@ public class NeuralNetwork {
             int label = labels.get(j);
             
             List<Float> results = network.forward(input);
-            float err = svmError(results, label);
+            float err = LossFunction.SOFT_MAX.classificationError(results, label);
             System.out.println(input + " => " + results + ", true label: " + label);
             System.out.println("\tsvm err: " + err);
         }         
