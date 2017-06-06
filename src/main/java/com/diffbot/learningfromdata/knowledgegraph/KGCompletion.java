@@ -17,8 +17,7 @@ public class KGCompletion {
             SecondPassKnowledgeFusion.FINAL_OUTPUT_PATH);
     private static final int MINIMUM_RELATIONS = 4;
 
-    public static final File KB2E_DIRECTORY = new File("data/kb2e");
-
+    static final File KB2E_DIRECTORY = new File("data/kb2e");
     static final File TRAIN_FILE = new File(KB2E_DIRECTORY, "train.txt");
     static final File VALID_FILE = new File(KB2E_DIRECTORY, "valid.txt");
     static final File TEST_FILE = new File(KB2E_DIRECTORY, "test.txt");
