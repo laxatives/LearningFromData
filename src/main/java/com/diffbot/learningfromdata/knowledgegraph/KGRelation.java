@@ -4,7 +4,9 @@ import com.diffbot.entities.*;
 
 import java.util.*;
 
+// TODO: enforce type-safety
 public enum KGRelation {
+    // TODO: add Gender
     EMPLOYER {
         @Override public Set<String> getRelatedEntityIds(DiffbotEntity de) {
             Set<String> adjacentIds = new HashSet<>();
@@ -13,6 +15,21 @@ public enum KGRelation {
                 if (p.employments != null) {
                     p.employments.stream().filter(e -> e.employer != null)
                             .map(e -> e.employer.value.parseDiffbotIdFromUri())
+                            .filter(Objects::nonNull).forEach(adjacentIds::add);
+                }
+            }
+            return adjacentIds;
+        }
+    },
+    EMPLOYMENT_CATEGORY {
+        @Override public Set<String> getRelatedEntityIds(DiffbotEntity de) {
+            Set<String> adjacentIds = new HashSet<>();
+            if (de instanceof Person) {
+                Person p = (Person) de;
+                if (p.employments != null) {
+                    p.employments.stream().filter(e -> e.categories != null)
+                            .flatMap(e -> e.categories.stream())
+                            .map(c -> c.value.parseDiffbotIdFromUri())
                             .filter(Objects::nonNull).forEach(adjacentIds::add);
                 }
             }
@@ -60,6 +77,35 @@ public enum KGRelation {
             return adjacentIds;
         }
     },
+    PARENT_ORGANIZATION {
+        @Override public Set<String> getRelatedEntityIds(DiffbotEntity de) {
+            Set<String> adjacentIds = new HashSet<>();
+            if (de instanceof Organization) {
+                Organization o = (Organization) de;
+                if (o.parentCompany != null) {
+                    String parentId = o.parentCompany.value.parseDiffbotIdFromUri();
+                    if (parentId != null) {
+                        adjacentIds.add(parentId);
+                    }
+                }
+            }
+            return adjacentIds;
+        }
+    },
+    SUBSIDIARY_ORGANIZATION {
+        @Override public Set<String> getRelatedEntityIds(DiffbotEntity de) {
+            Set<String> adjacentIds = new HashSet<>();
+            if (de instanceof Organization) {
+                Organization o = (Organization) de;
+                if (o.subsidiaries != null) {
+                    o.subsidiaries.stream()
+                            .map(f -> f.value.parseDiffbotIdFromUri())
+                            .filter(Objects::nonNull).forEach(adjacentIds::add);
+                }
+            }
+            return adjacentIds;
+        }
+    },
     AREA_PART_OF {
         @Override public Set<String> getRelatedEntityIds(DiffbotEntity de) {
             Set<String> adjacentIds = new HashSet<>();
@@ -77,14 +123,16 @@ public enum KGRelation {
 
     public abstract Set<String> getRelatedEntityIds(DiffbotEntity de);
 
-    public static List<Set<String>> getRelations(DiffbotEntity de) {
-        List<Set<String>> relatedEntityIds = new ArrayList<>();
+    public static Set<String> getRelations(DiffbotEntity de) {
+        Set<String> relatedEntityIds = new HashSet<>();
         for (KGRelation r : KGRelation.values()) {
-            relatedEntityIds.add(r.getRelatedEntityIds(de));
+            r.getRelatedEntityIds(de).stream().map(id -> "" + r.ordinal() + "\t" + id)
+                    .forEach(relatedEntityIds::add);
         }
         return relatedEntityIds;
     }
 
+    // TODO: populate partOf fields using LocationElector.populateParents
     private static Set<String> getLocationIds(List<Fact<Location>> locationFacts) {
         if (locationFacts == null) {
             return Collections.emptySet();

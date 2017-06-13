@@ -1,13 +1,13 @@
 package com.diffbot.ml;
 
+import com.diffbot.entities.Skill;
+import com.diffbot.entities.enums.RoleCategory;
 import com.diffbot.toolbox.FileTools;
 import com.diffbot.utils.Pair;
 import com.esotericsoftware.minlog.Log;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
-import com.koloboke.collect.map.hash.*;
-import com.koloboke.collect.set.hash.HashIntSet;
-import com.koloboke.collect.set.hash.HashIntSets;
+import com.google.common.collect.Lists;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -16,88 +16,83 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * TODO: refactor this and make it sane
+ * Inputs (provided by PTransEAddTrain):
+ *     entity2id.txt
+ *     relation2id.txt
+ *     train.txt
+ *     path2.txt
+ *     test.txt
+ *     entity2vec.txt
+ *     relation2vec.txt
+ *
  * TODO: refactor this into PTransEAddTrain as PTransEAdd
  * TODO: port to Spark/Tensorflow
  */
 public class PTransEAddTest {
-    private static final Splitter WHITESPACE_SPLITTER = Splitter.onPattern("\\s+").trimResults();
-    private static final File N2N_FILE = new File(KGCompletion.KB2E_DIRECTORY, "n2n.txt");
+    private static final Splitter WHITESPACE_SPLITTER = Splitter.onPattern("\\s+").trimResults().omitEmptyStrings();
     private static final int RERANK_NUM = 500;
     private int entityCount = 0;
     private int relationCount = 0;
 
-    private HashObjIntMap<String> entityToId = HashObjIntMaps.newUpdatableMap();
-    private HashObjIntMap<String> relationToId = HashObjIntMaps.newUpdatableMap();
-    private HashObjFloatMap<Pair<String, Integer>> pathConfidence = HashObjFloatMaps.newMutableMap();
-    private List<Integer> headIds = new ArrayList<>(); // list of headIds
-    private List<Integer> tailIds = new ArrayList<>(); // list of tailIds
-    private List<Integer> relationIds = new ArrayList<>(); // list of relationIds
-    private HashObjObjMap<Pair<Integer, Integer>, List<Pair<int[], Float>>> fb_path =
-            HashObjObjMaps.newMutableMap();
-    private HashIntObjMap<HashIntIntMap> entity2num = HashIntObjMaps.newMutableMap();
-    private HashIntIntMap e2num = HashIntIntMaps.newMutableMap();
-    private List<Integer> rel_type = new ArrayList<>(); // list of relationIds
+    private Map<String, Integer> entityToId = new HashMap<>();
+    private Map<String, Integer> relationToId = new HashMap<>();
+    private Map<Integer, String> idToEntity = new HashMap<>();
+    private Map<Integer, String> idToRelation = new HashMap<>();
+
+    private Map<Pair<String, Integer>, Float> pathConfidence = new HashMap<>();
+    private Map<Pair<Integer, Integer>, List<Pair<int[], Float>>> pathResources = new HashMap<>();
 
     /**
      * A map of Pair<headId, relationId> -> Set<tailId> where every headId, readId, tailId triple
      * implies a positive label.
      */
-    private HashObjObjMap<Pair<Integer, Integer>, HashIntSet> positiveTriples =
-            HashObjObjMaps.newUpdatableMap();
+    private Set<String> trainingTriples = new HashSet<>();
 
     private float[][] entityVec;
     private float[][] relationVec;
-    private boolean used = true;
 
     public void test() throws IOException {
         prepare();
         run();
     }
 
-    private void addRelations(int headId, int tailId, int relationId, boolean addIds) {
-        if (addIds) {
-            headIds.add(headId);
-            tailIds.add(tailId);
-            relationIds.add(relationId);
-        }
-
-        Pair<Integer, Integer> key = new Pair<>(headId, relationId);
-        positiveTriples.putIfAbsent(key, HashIntSets.newMutableSet());
-        positiveTriples.get(key).add(tailId);
-    }
-
-    private void addRelations(int headId, int tailId, int relationId,
-            List<Pair<int[], Float>> pathResources) {
-        addRelations(headId, tailId, relationId, true);
+    private void addRelations(int headId, int tailId, List<Pair<int[], Float>> pathResources) {
         if (!pathResources.isEmpty()) {
-            fb_path.put(new Pair<>(headId, tailId), pathResources);
+            this.pathResources.put(new Pair<>(headId, tailId), pathResources);
         }
     }
 
     private void prepare() throws IOException {
+        Log.info("PTransEAddTest.prepare", "Loading entities from " +
+                KGCompletion.ENTITY2ID_FILE + "...");
         try (BufferedReader br = FileTools.bufferedReader(KGCompletion.ENTITY2ID_FILE)) {
             for (String line = br.readLine(); line != null; line = br.readLine()) {
                 List<String> split = WHITESPACE_SPLITTER.splitToList(line);
                 String entity = split.get(0);
                 int id = Integer.valueOf(split.get(1));
                 entityToId.put(entity, id);
+                idToEntity.put(id, entity);
                 entityCount++;
             }
         }
 
+        Log.info("PTransEAddTest.prepare", "Loading relations from " +
+                KGCompletion.RELATION2ID_FILE + "...");
         try (BufferedReader br = FileTools.bufferedReader(KGCompletion.RELATION2ID_FILE)) {
             for (String line = br.readLine(); line != null; line = br.readLine()) {
                 List<String> split = WHITESPACE_SPLITTER.splitToList(line);
                 String relation = split.get(0);
                 int id = Integer.valueOf(split.get(1));
                 relationToId.put(relation, id);
+                idToRelation.put(id, relation);
                 // one for forward, one for inverse
                 relationCount += 2;
             }
         }
 
-        for (File pathFile : ImmutableList.of(Pcra.Mode.TEST.getPraFile(), Pcra.PATH2_FILE)) {
+        for (File pathFile : ImmutableList.of(Pcra.Mode.TEST.getPathResourceFile(), Pcra.PATH2_FILE)) {
+            Log.info("PTransEAddTest.prepare", "Loading triples from " +
+                    pathFile + "...");
             try (BufferedReader praReader = FileTools.bufferedReader(pathFile)) {
                 for (String line = praReader.readLine(); line != null; line = praReader.readLine()) {
                     Iterator<String> triple = WHITESPACE_SPLITTER.split(line).iterator();
@@ -113,43 +108,47 @@ public class PTransEAddTest {
                         continue;
                     }
 
-                    int headId = entityToId.getInt(head);
-                    int tailId = entityToId.getInt(tail);
-                    List<Pair<int[], Float>> b = new ArrayList<>();
+                    int headId = entityToId.get(head);
+                    int tailId = entityToId.get(tail);
+                    List<Pair<int[], Float>> pathResources = new ArrayList<>();
 
-                    String pathResources = praReader.readLine();
+                    String pathLine = praReader.readLine();
 
-                    Iterator<String> parts = WHITESPACE_SPLITTER.split(pathResources).iterator();
+                    Iterator<String> parts = WHITESPACE_SPLITTER.split(pathLine).iterator();
                     int size = Integer.valueOf(parts.next());
                     for (int i = 0; i < size; i++) {
                         // Format is <path length> <path> <resource allocation>
                         int pathLength = Integer.valueOf(parts.next());
                         int[] path = new int[pathLength];
+
+                        Iterator<String> pathParts = Pcra.PATH_SPLITTER.split(parts.next()).iterator();
                         for (int j = 0; j < pathLength; j++) {
-                            path[j] = Integer.valueOf(parts.next());
+                            path[j] = Integer.valueOf(pathParts.next());
                         }
+                        if (pathParts.hasNext()) {
+                            Log.error("PTransEAddTest.prepare", "Unexpected path2: " + pathLine);
+                            return;
+                        }
+
                         float resourceAllocation = Float.valueOf(parts.next());
 
-                        b.add(new Pair<>(path, resourceAllocation));
+                        pathResources.add(new Pair<>(path, resourceAllocation));
                     }
 
                     if (parts.hasNext()) {
-                        Log.error("PTransEAddTest.prepare", "Unexpected pathResources: " + pathResources);
+                        Log.error("PTransEAddTest.prepare", "Unexpected pathResources: " + pathLine);
                         return;
                     }
 
-                    if (pathFile.equals(Pcra.Mode.TEST.getPraFile())) {
-                        int relationId = Integer.valueOf(triple.next());
-                        addRelations(headId, tailId, relationId, b);
-                    } else {
-                        addRelations(headId, tailId, -1, b);
-                    }
+                    addRelations(headId, tailId, pathResources);
                 }
             }
         }
 
-        try (BufferedReader praReader = FileTools.bufferedReader(Pcra.Mode.TRAIN.getTriplesFile())) {
-            for (String line = praReader.readLine(); line != null; line = praReader.readLine()) {
+        Log.info("PTransEAddTest.prepare", "Loading triples from " +
+                Pcra.Mode.TRAIN.getTriplesFile() + "...");
+        try (BufferedReader trainReader = FileTools.bufferedReader(Pcra.Mode.TRAIN.getTriplesFile())) {
+            for (String line = trainReader.readLine(); line != null; line = trainReader.readLine()) {
                 Iterator<String> triple = WHITESPACE_SPLITTER.split(line).iterator();
                 String head = triple.next();
                 String tail = triple.next();
@@ -166,55 +165,30 @@ public class PTransEAddTest {
                     continue;
                 }
 
-                int headId = entityToId.getInt(head);
-                int tailId = entityToId.getInt(tail);
-                int relationId = relationToId.getInt(relation);
-
-                entity2num.putIfAbsent(relationId, HashIntIntMaps.newMutableMap());
-                entity2num.get(relationId).addValue(headId, 1, 0);
-                entity2num.putIfAbsent(relationId, HashIntIntMaps.newMutableMap());
-                entity2num.get(relationId).addValue(tailId, 1, 0);
-                e2num.addValue(headId, 1, 0);
-                e2num.addValue(tailId, 1, 0);
-                addRelations(headId, tailId, relationId, false);
+                int headId = entityToId.get(head);
+                int tailId = entityToId.get(tail);
+                int relationId = relationToId.get(relation);
+                trainingTriples.add(headId + "-" + tailId + "-" + relationId);
             }
         }
 
-        try (BufferedReader validReader = FileTools.bufferedReader(KGCompletion.VALID_FILE)) {
-            for (String line = validReader.readLine(); line != null; line = validReader.readLine()) {
-                Iterator<String> triple = WHITESPACE_SPLITTER.split(line).iterator();
-                String head = triple.next();
-                String tail = triple.next();
-                String relation = triple.next();
-
-                if (!entityToId.containsKey(head)) {
-                    Log.warn("PTransEAddTest.prepare", "Missing entity " + head);
-                    continue;
-                } else if (!entityToId.containsKey(tail)) {
-                    Log.warn("PTransEAddTest.prepare", "Missing entity " + tail);
-                    continue;
-                } else if (!relationToId.containsKey(relation)) {
-                    Log.warn("PTransEAddTest.prepare", "Missing relation " + relation);
-                    continue;
-                }
-
-                int headId = entityToId.getInt(head);
-                int tailId = entityToId.getInt(tail);
-                int relationId = relationToId.getInt(relation);
-                addRelations(headId, tailId, relationId, false);
-            }
-        }
-
+        Log.info("PTransEAddTest.prepare", "Loading path confidences from " +
+                Pcra.CONFIDENCE_FILE + "...");
         try (BufferedReader confidenceReader = FileTools.bufferedReader(Pcra.CONFIDENCE_FILE)) {
             for (String line = confidenceReader.readLine(); line != null; line = confidenceReader.readLine()) {
                 Iterator<String> parts = WHITESPACE_SPLITTER.split(line).iterator();
                 int size = Integer.valueOf(parts.next());
 
                 List<String> pathList = new ArrayList<>();
-                for (int i = 0; i < size; i++) {
-                    pathList.add(parts.next());
+                Iterator<String> pathParts = Pcra.PATH_SPLITTER.split(parts.next()).iterator();
+                for (int j = 0; j < size; j++) {
+                    pathList.add(pathParts.next());
                 }
                 String path = pathList.stream().collect(Collectors.joining(" "));
+                if (pathParts.hasNext()) {
+                    Log.error("PTransEAddTest.prepare", "Unexpected confidence: " + line);
+                    return;
+                }
 
                 if (parts.hasNext()) {
                     Log.error("PTransEAddTrain.prepare", "Unexpected confidence path: " + line);
@@ -226,41 +200,17 @@ public class PTransEAddTest {
                 Iterator<String> confidenceParts = WHITESPACE_SPLITTER.split(confidences).iterator();
                 int confidenceLength = Integer.valueOf(confidenceParts.next());
                 for (int i = 0; i < confidenceLength; i++) {
-                    String relation = confidenceParts.next();
+                    Integer relation = Integer.valueOf(confidenceParts.next());
 
                     float confidence = Float.valueOf(confidenceParts.next());
-                    pathConfidence.put(new Pair(path, relation), confidence);
+                    pathConfidence.put(new Pair<>(path, relation), confidence);
 
-                    Log.debug(path + " " + relation + " " + confidence);
+                    Log.debug(path + "," + relation + "->" + confidence);
                 }
 
                 if (parts.hasNext()) {
                     Log.error("PTransEAddTrain.prepare", "Unexpected confidences: " + confidences);
                     return;
-                }
-            }
-        }
-
-        // TODO: what is this file...?
-        try (BufferedReader n2nReader = FileTools.bufferedReader(N2N_FILE)) {
-            for (String line = n2nReader.readLine(); line != null; line = n2nReader.readLine()) {
-                Iterator<String> parts = WHITESPACE_SPLITTER.split(line).iterator();
-                float x = Float.valueOf(parts.next());
-                float y = Float.valueOf(parts.next());
-
-                // TODO: I have no idea what this does
-                if (x < 1.5) {
-                    if (y < 1.5) {
-                        rel_type.add(0);
-                    } else {
-                        rel_type.add(1);
-                    }
-                } else {
-                    if (y < 1.5) {
-                        rel_type.add(2);
-                    } else {
-                        rel_type.add(3);
-                    }
                 }
             }
         }
@@ -270,6 +220,7 @@ public class PTransEAddTest {
         Log.info("PTransETest.run", "relationCount=" + relationCount +
                 ", entityCount=" + entityCount);
 
+        Log.info("Loading Entity Vector from " + PTransEAddTrain.ENTITY2VEC_FILE + "...");
         entityVec = new float[entityCount][PTransEAddTrain.N];
         try (BufferedReader entityVecReader = FileTools.bufferedReader(PTransEAddTrain.ENTITY2VEC_FILE)) {
             for (int i = 0; i < entityCount; i++) {
@@ -280,7 +231,7 @@ public class PTransEAddTest {
                 }
 
                 if (entries.hasNext()) {
-                    Log.error("PTransEAddTest.run", "Entity vector length mismatch");
+                    Log.error("PTransEAddTest.run", "Entity vector length mismatch on row " + i);
                     return;
                 }
             }
@@ -290,9 +241,10 @@ public class PTransEAddTest {
             }
         }
 
+        Log.info("Loading Relation Vector from " + PTransEAddTrain.RELATION2VEC_FILE + "...");
         relationVec = new float[relationCount][PTransEAddTrain.N];
         try (BufferedReader relationVecReader = FileTools.bufferedReader(PTransEAddTrain.RELATION2VEC_FILE)) {
-            for (int i = 0; i < entityCount; i++) {
+            for (int i = 0; i < relationCount; i++) {
                 String row = relationVecReader.readLine();
                 Iterator<String> entries = WHITESPACE_SPLITTER.split(row).iterator();
                 for (int j = 0; j < PTransEAddTrain.N; j++) {
@@ -302,8 +254,6 @@ public class PTransEAddTest {
                 if (entries.hasNext()) {
                     Log.error("PTransEAddTest.run", "Relation vector length mismatch");
                     return;
-                } else if (PTransEAddTrain.vectorLength(relationVec[i]) > 1) {
-                    Log.error("PTransEAddTest.run", "Vector should be normalized: " + row);
                 }
             }
 
@@ -312,240 +262,150 @@ public class PTransEAddTest {
             }
         }
 
-        double lsum = 0;
-        double lsum_filter = 0;
-        double mid_sum = 0;
-        double mid_sum_filter = 0;
-        double rsum = 0;
-        double rsum_filter = 0;
-
-        double lp_n = 0;
-        double lp_n_filter = 0;
-        double mid_p_n = 0;
-        double mid_p_n_filter = 0;
-        double rp_n = 0;
-        double rp_n_filter = 0;
-
-        double l_one2one = 0;
-        double r_one2one = 0;
-        double one2one_num = 0;
-        double l_n2one = 0;
-        double r_n2one = 0;
-        double n2one_num = 0;
-        double l_one2n = 0;
-        double r_one2n = 0;
-        double one2n_num = 0;
-        double l_n2n = 0;
-        double r_n2n = 0;
-        double n2n_num = 0;
-
-        HashIntFloatMap lsum_r = HashIntFloatMaps.newMutableMap();
-        HashIntFloatMap lsum_filter_r = HashIntFloatMaps.newMutableMap();
-        HashIntFloatMap mid_sum_r = HashIntFloatMaps.newMutableMap();
-        HashIntFloatMap mid_sum_filter_r = HashIntFloatMaps.newMutableMap();
-        HashIntFloatMap rsum_r = HashIntFloatMaps.newMutableMap();
-        HashIntFloatMap rsum_filter_r = HashIntFloatMaps.newMutableMap();
-
-        HashIntFloatMap lp_n_r = HashIntFloatMaps.newMutableMap();
-        HashIntFloatMap lp_n_filter_r = HashIntFloatMaps.newMutableMap();
-        HashIntFloatMap mid_p_n_r = HashIntFloatMaps.newMutableMap();
-        HashIntFloatMap mid_p_n_filter_r = HashIntFloatMaps.newMutableMap();
-        HashIntFloatMap rp_n_r = HashIntFloatMaps.newMutableMap();
-        HashIntFloatMap rp_n_filter_r = HashIntFloatMaps.newMutableMap();
-
-        HashIntIntMap rel_num = HashIntIntMaps.newMutableMap();
-
-        int hit_n = 1;
-        HashObjIntMap<Pair<Integer, Integer>> e1_e2 = HashObjIntMaps.newMutableMap();
-        for (int testid = 0; testid < tailIds.size() / 2; testid++) {
-            int h = headIds.get(testid * 2);
-            // TODO: rename l -> tailId
-            int l = tailIds.get(testid * 2);
-            int rel = tailIds.get(testid * 2);
-
-            rel_num.addValue(rel, 1, 0);
-            List<Pair<Integer, Double>> a = new ArrayList<>();
-
-            // TODO: these should be enum
-            int relationType = rel_type.get(rel);
-            if (relationType == 0) {
-                one2one_num++;
-            } else if (relationType == 1) {
-                n2one_num++;
-            } else if (relationType == 2) {
-                one2n_num++;
-            } else if (relationType == 3) {
-                n2n_num++;
+        for (int headId = 0; headId < entityCount; headId++) {
+            String headDiffbotId = idToEntity.get(headId);
+            if (!headDiffbotId.startsWith("P")) {
+                continue;
             }
 
-            int filter = 0;
+            // Infer skills
+            inferTail(headId, KGRelation.SKILL.ordinal());
 
-            // Head entities
-            for (int i = 0; i < entityCount; i++) {
-                a.add(new Pair<>(i, calc_sum(i, l, rel, false)));
-            }
+            // Infer employment category
+            inferTail(headId, KGRelation.EMPLOYMENT_CATEGORY.ordinal());
 
-            Collections.sort(a, Comparator.comparing(s -> s.second));
-            for (int i = a.size() - 1; i >= a.size() - RERANK_NUM; i--) {
-                a.get(i).second = calc_sum(a.get(i).first, l, rel, true);
-            }
-
-            Collections.sort(a, Comparator.comparing(s -> s.second));
-            for (int i = a.size() - 1; i >= 0; i--) {
-                if (a.size() - i <= RERANK_NUM) {
-                    e1_e2.put(new Pair<>(a.get(i).first, l), 1);
-                }
-
-                if (!positiveTriples.get(new Pair<>(a.get(i).first, rel)).contains(l)) {
-                    filter++;
-                }
-
-                if (a.get(i).first == h) {
-                    lsum += a.size() - i;
-                    lsum_filter += filter + 1;
-                    lsum_r.addValue(rel, a.size() - 1, 0);
-                    lsum_filter_r.addValue(rel, filter + 1, 0);
-
-                    if (a.size() - 1 <= hit_n) {
-                        lp_n += 1;
-                        lp_n_r.addValue(rel, 1, 0);
-                    }
-
-                    if (filter < hit_n) {
-                        lp_n_filter++;
-                        lp_n_filter_r.addValue(rel, 1, 0);
-                        if (relationType == 0) {
-                            l_one2one++;
-                        } else if (relationType == 1) {
-                            l_n2one++;
-                        } else if (relationType == 2) {
-                            l_one2n++;
-                        } else if (relationType == 3) {
-                            l_n2n++;
-                        }
-                    }
-                }
-            }
-
-            // Tail entities
-            a.clear();
-            filter = 0;
-            for (int i = 0; i < entityCount; i++) {
-                a.add(new Pair<>(i, calc_sum(h, i, rel, false)));
-            }
-
-            Collections.sort(a, Comparator.comparing(s -> s.second));
-            for (int i = a.size() - 1; i >= a.size() - RERANK_NUM; i--) {
-                a.get(i).second = calc_sum(h, a.get(i).first, rel, true);
-            }
-
-            Collections.sort(a, Comparator.comparing(s -> s.second));
-            for (int i = a.size() - 1; i >= 0; i--) {
-                if (a.size() - i <= RERANK_NUM) {
-                    e1_e2.put(new Pair<>(h, a.get(i).first), 1);
-                }
-
-                if (!positiveTriples.get(new Pair<>(h, rel)).contains(a.get(i).first)) {
-                    filter++;
-                }
-
-                if (a.get(i).first == l) {
-                    rsum += a.size() - i;
-                    rsum_filter += filter + 1;
-                    rsum_r.addValue(rel, a.size() - 1, 0);
-                    rsum_filter_r.addValue(rel, filter + 1, 0);
-
-                    if (a.size() - 1 <= hit_n) {
-                        rp_n += 1;
-                        rp_n_r.addValue(rel, 1, 0);
-                    }
-
-                    if (filter < hit_n) {
-                        rp_n_filter++;
-                        rp_n_filter_r.addValue(rel, 1, 0);
-                        if (relationType == 0) {
-                            r_one2one++;
-                        } else if (relationType == 1) {
-                            r_n2one++;
-                        } else if (relationType == 2) {
-                            r_one2n++;
-                        } else if (relationType == 3) {
-                            r_n2n++;
-                        }
-                    }
-                }
-            }
-
-            // Relations
-            a.clear();
-            filter = 0;
-            for (int i = 0; i < relationCount; i++) {
-                a.add(new Pair<>(i, calc_sum(h, l, i, false)));
-            }
-            Collections.sort(a, Comparator.comparing(s -> s.second));
-            for (int i = a.size() - 1; i >= 0; i--) {
-                if (a.size() - i <= RERANK_NUM) {
-                    e1_e2.put(new Pair<>(h, a.get(i).first), 1);
-                }
-
-                if (!positiveTriples.get(new Pair<>(h, a.get(i).first)).contains(l)) {
-                    filter++;
-                }
-
-                if (a.get(i).first == rel) {
-                    mid_sum += a.size() - i;
-                    mid_sum_filter += filter + 1;
-                    mid_sum_r.addValue(rel, a.size() - 1, 0);
-                    mid_sum_filter_r.addValue(rel, filter + 1, 0);
-
-                    if (a.size() - 1 <= hit_n) {
-                        mid_p_n += 1;
-                        mid_p_n_r.addValue(rel, 1, 0);
-                    }
-
-                    if (filter < hit_n) {
-                        mid_p_n_filter++;
-                        mid_p_n_filter_r.addValue(rel, 1, 0);
-                    }
-                }
-            }
-
-            if (testid % 100 == 0) {
-                int i = testid + 1;
-                Log.info(testid + ":\t" + (lsum/i) + " " + (lp_n/i) + " " + (rsum/i) + " " +
-                        (rp_n/i) + "\t" + (lsum_filter/i) + " " + (lp_n_filter/i) + " " +
-                        (rsum_filter/i) + " " + (rp_n_filter/i));
-                Log.info("\t" + (mid_sum/i) + " " + (mid_p_n/i) + "\t" + (mid_sum_filter/i) +
-                        " " + (mid_p_n_filter/i));
-                // TODO: more logging
-            }
+            // Find similar
+            getSimilar(headId);
         }
     }
 
-    private double calc_sum(int e1, int e2, int rel, boolean used) {
-        double sum = 0;
-        if (PTransEAddTrain.L1_FLAG) {
-            for (int j = 0; j < PTransEAddTrain.N; j++) {
-                sum -= Math.abs(entityVec[e2][j] - entityVec[e1][j] - relationVec[rel][j]);
-                sum -= Math.abs(entityVec[e1][j] - entityVec[e2][j] -
-                        relationVec[rel + (relationCount/2)][j]);
-            }
+    private void inferTail(int headId, int relationId) {
+        List<Pair<Integer, Double>> candidateScores = new ArrayList<>();
+
+        // TODO: enforce entity type generically
+        String tailTypePrefix;
+        if (KGRelation.SKILL.ordinal() == relationId) {
+            tailTypePrefix = "S";
+        } else if (KGRelation.EMPLOYMENT_CATEGORY.ordinal() == relationId) {
+            tailTypePrefix = "RC";
         } else {
-            for (int j = 0; j < PTransEAddTrain.N; j++) {
-                double delta = entityVec[e2][j] - entityVec[e1][j] - relationVec[rel][j];
-                sum -= delta * delta;
-                double invDelta = Math.abs(entityVec[e1][j] - entityVec[e2][j] -
-                        relationVec[rel + (relationCount/2)][j]);
-                sum -= invDelta * invDelta;
-            }
+            throw new UnsupportedOperationException(
+                    "PTransEAddTest.inferTail does not support relationId " + relationId);
         }
 
-        int h = e1;
-        int l = e2;
+        for (int i = 0; i < entityCount; i++) {
+            String tailDiffbotId = idToEntity.get(i);
+            if (!tailDiffbotId.startsWith(tailTypePrefix)) {
+                continue;
+            }
 
-        if (used) {
+            double score = scoreTriple(headId, i, relationId, false);
+            if (score > 80) {
+                candidateScores.add(new Pair<>(i, score));
+            }
+        }
+        candidateScores.sort(Comparator.comparing(s -> s.second));
+        for (int i = candidateScores.size() - 1; i >= Math.max(candidateScores.size() - RERANK_NUM, 0); i--) {
+            candidateScores.get(i).second = scoreTriple(headId, candidateScores.get(i).first,
+                    relationId, true);
+        }
+        candidateScores.sort(Comparator.comparing(s -> s.second));
+
+        List<String> results = Lists.newArrayList("Best guesses given head entityId " +
+                idToEntity.get(headId) + " and relation " + idToRelation.get(relationId));
+        for (int i = candidateScores.size() - 1; i >= 0; i--) {
+            boolean inSample = trainingTriples.contains(headId + "-" +
+                    candidateScores.get(i).first + "-" + relationId);
+            if (candidateScores.size() - i <= 8) {
+                results.add("\t" + getDiffbotName(candidateScores.get(i).first, relationId) +
+                        " scored " +
+                        candidateScores.get(i).second + (inSample ? " (in sample)" : ""));
+            }
+        }
+        if (results.size() > 1) {
+            Log.info("PTransEAddTest.inferTail", results.stream()
+                    .collect(Collectors.joining("\n")));
+        }
+    }
+
+    // TODO: enforce entity type (other than Person)
+    private void getSimilar(int headId) {
+        List<Pair<Integer, Double>> candidateScores = new ArrayList<>();
+        for (int i = 0; i < entityCount; i++) {
+            String tailDiffbotId = idToEntity.get(i);
+            if (headId == i || !tailDiffbotId.startsWith("P")) {
+                continue;
+            }
+
+            double similarity = scoreSimilarity(headId, i);
+            if (similarity > 65) {
+                candidateScores.add(new Pair<>(i, similarity));
+            }
+        }
+        candidateScores.sort(Comparator.comparing(s -> s.second));
+
+        List<String> results = Lists.newArrayList("Similar entities to head entityId " +
+                idToEntity.get(headId));
+        for (int i = candidateScores.size() - 1; i >= 0; i--) {
+            if (candidateScores.size() - i <= 4) {
+                results.add("\t" + idToEntity.get(candidateScores.get(i).first) + " scored " +
+                        candidateScores.get(i).second);
+            }
+        }
+        if (results.size() > 1) {
+            Log.info("PTransEAddTest", results.stream()
+                    .collect(Collectors.joining("\n")));
+        }
+    }
+
+    private String getDiffbotName(int entityId, int relationId) {
+        if (KGRelation.SKILL.ordinal() == relationId) {
+            Skill skill = Skill.findBySkillId(idToEntity.get(entityId).replaceFirst("S_", ""));
+            if (skill != null) {
+                return skill.name.value;
+            }
+        } else if (KGRelation.EMPLOYMENT_CATEGORY.ordinal() == relationId) {
+            String rcName = RoleCategory.codeToName(idToEntity.get(entityId));
+            if (rcName != null) {
+                return rcName;
+            }
+        }
+        return idToEntity.get(entityId);
+    }
+
+    private double scoreSimilarity(int e1, int e2) {
+        double sum = 0;
+        for (int j = 0; j < PTransEAddTrain.N; j++) {
+//            sum -= 10 * Math.abs(entityVec[e1][j] - entityVec[e2][j]);
+            sum += entityVec[e1][j] * entityVec[e2][j];
+        }
+
+        double norm1 = PTransEAddTrain.l2Norm(entityVec[e1]);
+        if (norm1 > 0) {
+            sum /= norm1;
+        }
+
+        double norm2 = PTransEAddTrain.l2Norm(entityVec[e2]);
+        if (norm2 > 0) {
+            sum /= norm2;
+        }
+
+        return 100 * sum;
+    }
+
+    private double scoreTriple(int e1, int e2, int rel, boolean pathBoost) {
+        double sum = 100;
+
+        int inverseRelationId = rel + (relationCount / 2);
+
+        for (int j = 0; j < PTransEAddTrain.N; j++) {
+            sum -= Math.abs(entityVec[e2][j] - entityVec[e1][j] - relationVec[rel][j]);
+            sum -= Math.abs(entityVec[e1][j] - entityVec[e2][j] - relationVec[inverseRelationId][j]);
+        }
+
+        if (pathBoost) {
             List<Pair<int[], Float>> path_list =
-                    fb_path.getOrDefault(new Pair<>(h,l), Collections.emptyList());
+                    pathResources.getOrDefault(new Pair<>(e1, e2), Collections.emptyList());
             for (Pair<int[], Float> path : path_list) {
                 int[] rel_path = path.first;
                 String pathString = Arrays.stream(rel_path)
@@ -553,42 +413,42 @@ public class PTransEAddTest {
                         .map(String::valueOf)
                         .collect(Collectors.joining(" "));
                 double pr = path.second;
-                double pr_path = pathConfidence
-                        .getOrDefault(new Pair<>(pathString, rel), 0);
-                sum += calc_path(rel, rel_path) * pr * pr_path;
+                double pr_path = pathConfidence.getOrDefault(
+                        new Pair<>(pathString, rel), 0f);
+
+                sum += scorePath(rel, rel_path) * pr * pr_path;
             }
 
+            // TODO: this loop doesn't appear to do anything (including in the reference version)
             List<Pair<int[], Float>> reverse_path_list =
-                    fb_path.getOrDefault(new Pair<>(l, h), Collections.emptyList());
-            for (Pair<int[], Float> path : path_list) {
+                    pathResources.getOrDefault(new Pair<>(e2, e1), Collections.emptyList());
+            for (Pair<int[], Float> path : reverse_path_list) {
                 int[] rel_path = path.first;
                 String pathString = Arrays.stream(rel_path)
                         .boxed()
                         .map(String::valueOf)
                         .collect(Collectors.joining(" "));
                 double pr = path.second;
-                double pr_path = pathConfidence
-                        .getOrDefault(new Pair<>(pathString, rel + (relationCount / 2)), 0);
-                sum += calc_path(rel + (relationCount / 2), rel_path) * pr * pr_path;
+                double pr_path = pathConfidence.getOrDefault(
+                        new Pair<>(pathString, inverseRelationId), 0f);
+                sum += scorePath(inverseRelationId, rel_path) * pr * pr_path;
             }
         }
+
+        //        System.out.println("" + e1 + "," + e2 + "," + rel +" -> " + sum);
 
         return sum;
     }
 
-    double calc_path(int r1, int[] rel_path) {
+    private double scorePath(int r1, int[] rel_path) {
         double sum = 0;
         for (int k = 0; k < PTransEAddTrain.N; k++) {
             double tmp = relationVec[r1][k];
-            for (int j = 0; j < rel_path.length; j++) {
-                tmp -= relationVec[rel_path[j]][k];
+            for (int j : rel_path) {
+                tmp -= relationVec[j][k];
             }
 
-            if (PTransEAddTrain.L1_FLAG) {
-                sum += Math.abs(tmp);
-            } else {
-                sum += tmp * tmp;
-            }
+            sum -= Math.abs(tmp);
         }
         return sum;
     }
