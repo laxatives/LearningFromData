@@ -284,10 +284,13 @@ public class PTransEAddTest {
 
         // TODO: enforce entity type generically
         String tailTypePrefix;
+        double minScore;
         if (KGRelation.SKILL.ordinal() == relationId) {
             tailTypePrefix = "S";
+            minScore = 90;
         } else if (KGRelation.EMPLOYMENT_CATEGORY.ordinal() == relationId) {
             tailTypePrefix = "RC";
+            minScore = 88;
         } else {
             throw new UnsupportedOperationException(
                     "PTransEAddTest.inferTail does not support relationId " + relationId);
@@ -300,7 +303,7 @@ public class PTransEAddTest {
             }
 
             double score = scoreTriple(headId, i, relationId, false);
-            if (score > 80) {
+            if (score > minScore) {
                 candidateScores.add(new Pair<>(i, score));
             }
         }
@@ -311,18 +314,19 @@ public class PTransEAddTest {
         }
         candidateScores.sort(Comparator.comparing(s -> s.second));
 
-        List<String> results = Lists.newArrayList("Best guesses given head entityId " +
-                idToEntity.get(headId) + " and relation " + idToRelation.get(relationId));
+        List<String> results = Lists.newArrayList("Best guesses given http://localhost:9200/diffbot_entity/Person/" +
+                idToEntity.get(headId) + " and relation " + idToRelation.get(relationId) + ":");
+        boolean outOfSampleExists = false;
         for (int i = candidateScores.size() - 1; i >= 0; i--) {
             boolean inSample = trainingTriples.contains(headId + "-" +
                     candidateScores.get(i).first + "-" + relationId);
             if (candidateScores.size() - i <= 8) {
-                results.add("\t" + getDiffbotName(candidateScores.get(i).first, relationId) +
-                        " scored " +
-                        candidateScores.get(i).second + (inSample ? " (in sample)" : ""));
+                outOfSampleExists |= !inSample;
+                results.add("\t" + getDiffbotName(candidateScores.get(i).first, relationId) + "\tscored\t" +
+                        candidateScores.get(i).second + (inSample ? "\t(in sample)" : ""));
             }
         }
-        if (results.size() > 1) {
+        if (outOfSampleExists && results.size() > 1) {
             Log.info("PTransEAddTest.inferTail", results.stream()
                     .collect(Collectors.joining("\n")));
         }
@@ -338,17 +342,18 @@ public class PTransEAddTest {
             }
 
             double similarity = scoreSimilarity(headId, i);
-            if (similarity > 65) {
+            if (similarity > 95) {
                 candidateScores.add(new Pair<>(i, similarity));
             }
         }
         candidateScores.sort(Comparator.comparing(s -> s.second));
 
-        List<String> results = Lists.newArrayList("Similar entities to head entityId " +
+        List<String> results = Lists.newArrayList("Similar entities to http://localhost:9200/diffbot_entity/Person/" +
                 idToEntity.get(headId));
         for (int i = candidateScores.size() - 1; i >= 0; i--) {
             if (candidateScores.size() - i <= 4) {
-                results.add("\t" + idToEntity.get(candidateScores.get(i).first) + " scored " +
+                results.add("\thttp://localhost:9200/diffbot_entity/Person/" +
+                        idToEntity.get(candidateScores.get(i).first) + "\tscored\t" +
                         candidateScores.get(i).second);
             }
         }
@@ -416,7 +421,7 @@ public class PTransEAddTest {
                 double pr_path = pathConfidence.getOrDefault(
                         new Pair<>(pathString, rel), 0f);
 
-                sum += scorePath(rel, rel_path) * pr * pr_path;
+                sum -= scorePath(rel, rel_path) * pr * pr_path;
             }
 
             // TODO: this loop doesn't appear to do anything (including in the reference version)
@@ -431,7 +436,7 @@ public class PTransEAddTest {
                 double pr = path.second;
                 double pr_path = pathConfidence.getOrDefault(
                         new Pair<>(pathString, inverseRelationId), 0f);
-                sum += scorePath(inverseRelationId, rel_path) * pr * pr_path;
+                sum -= scorePath(inverseRelationId, rel_path) * pr * pr_path;
             }
         }
 

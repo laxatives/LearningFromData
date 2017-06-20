@@ -36,10 +36,10 @@ public class Pcra {
     private static final int LOG_FREQUENCY = 1_000;
     private static final float MIN_RESOURCE = 0.01f;
     private static final Splitter WHITESPACE_SPLITTER = Splitter.onPattern("\\s+").trimResults();
-    public static final Splitter PATH_SPLITTER = Splitter.onPattern(">").trimResults();
     private static final File TEST_PRA_FILE = new File(KGCompletion.KB2E_DIRECTORY, "test_pra.txt");
     private static final File TRAIN_PRA_FILE = new File(KGCompletion.KB2E_DIRECTORY, "train_pra.txt");
 
+    static final Splitter PATH_SPLITTER = Splitter.onPattern(">").trimResults();
     static final File PATH2_FILE = new File(KGCompletion.KB2E_DIRECTORY, "path2.txt");
     static final File CONFIDENCE_FILE = new File(KGCompletion.KB2E_DIRECTORY, "confidence.txt");
 
@@ -89,11 +89,13 @@ public class Pcra {
         Log.info("PCRA", String.format("Loaded %d relations in %dms.",
                 relationCount, System.currentTimeMillis() - startMs));
 
-        // TODO: move to database
+        // TODO: use Dgraph
         // map of `headId tailId` -> relationId's
         Map<String, Set<String>> pairRelationMap = new HashMap<>();
         // map of `headId` -> (map of `relationId` -> tailId's)
         Map<String, Map<String, Set<String>>> headRelationTailMap = new HashMap<>();
+        // map of `headId tailId` -> map of (relationId -> resource)
+        Map<String, Map<String, Float>> pathResources = new HashMap<>();
 
         startMs = System.currentTimeMillis();
         Log.info("PCRA", "Loading training relations...");
@@ -101,10 +103,6 @@ public class Pcra {
                 relationToId, relationCount);
         Log.info("PCRA", String.format("Loaded %d training relations in %dms.",
                 trainingTriples, System.currentTimeMillis() - startMs));
-
-        // TODO: move to chronicleMap as Map<String, Float>
-        // map of `headId tailId` -> map of (relationId -> resource)
-        Map<String, Map<String, Float>> pathResources = new HashMap<>();
 
         // counts of relation occurrences
         Map<String, Integer> pathCounts = new HashMap<>();
@@ -155,7 +153,7 @@ public class Pcra {
         countedHeadEntities = 0;
         for (String headId : headRelationTailMap.keySet()) {
             countedHeadEntities++;
-            // Count 2-hop paths and flow resources from 1-hop parent path
+            // Count 2-hop paths and flow resources from 1-hop parent paths
             for (String relationId : headRelationTailMap.get(headId).keySet()) {
                 Set<String> tailIds = headRelationTailMap.get(headId).get(relationId);
                 for (String tailId : tailIds) {
@@ -187,7 +185,7 @@ public class Pcra {
 
             if (countedHeadEntities % LOG_FREQUENCY == 0) {
                 Log.info("PCRA", String.format("\tCounted 2-hop path frequencies from %d " +
-                        "of %d source entities in time: %dms", countedHeadEntities,
+                                "of %d source entities in time: %dms", countedHeadEntities,
                         headRelationTailMap.size(), System.currentTimeMillis() - startMs));
             }
         }
@@ -292,6 +290,7 @@ public class Pcra {
                 String headId = split.next();
                 String tailId = split.next();
                 String relationId = relationToId.get(split.next());
+                // TODO: ignore inverse relations?
                 String inverseRelationId = getInverseRelationId(relationId, relationCount);
                 tripleCount += 2;
 

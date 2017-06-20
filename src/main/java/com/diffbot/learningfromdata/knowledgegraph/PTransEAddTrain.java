@@ -5,7 +5,6 @@ import com.diffbot.toolbox.FileTools;
 import com.diffbot.utils.Pair;
 import com.esotericsoftware.minlog.Log;
 import com.google.common.base.Splitter;
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.AtomicDouble;
 
@@ -36,23 +35,25 @@ import java.util.stream.IntStream;
 public class PTransEAddTrain {
     private static final DecimalFormat DECIMAL_FORMAT = new DecimalFormat("#0.000000");
     private static final Splitter WHITESPACE_SPLITTER = Splitter.onPattern("\\s+").trimResults().omitEmptyStrings();
-    private static final Random RANDOM = new Random();
     // TODO: tune rate for Diffbot KG
-    private static final float INITIAL_LEARNING_RATE = 0.01f;
+    private static final float INITIAL_LEARNING_RATE = 0.02f;
     private static final float MARGIN = 1f;
-    private static final int BATCH_COUNT = 100;
+    private static final int BATCH_COUNT = 64; // this should be divisible by number of threads
     private static final int EPOCHS = 1000;
 
     /**
      * The degree of the latent feature space.
      */
-    static final int N = 25;
+    static final int N = 50;
     static final File ENTITY2VEC_FILE = new File(KGCompletion.KB2E_DIRECTORY, "entity2vec.txt");
     static final File RELATION2VEC_FILE = new File(KGCompletion.KB2E_DIRECTORY, "relation2vec.txt");
 
     private int entityCount = 0;
     private int relationCount = 0;
+    private Map<Character, List<Integer>> typeToIds = new HashMap<>();
+    private Map<Integer, Character> idToType = new HashMap<>();
     private Map<String, Integer> entityToId = new HashMap<>();
+    private List<Character> types = new ArrayList<>();
     private List<Integer> headIds = new ArrayList<>();
     private List<Integer> tailIds = new ArrayList<>();
     private List<Integer> relationIds = new ArrayList<>();
@@ -79,11 +80,12 @@ public class PTransEAddTrain {
 
     private void run() throws IOException {
         Log.info("PTransEAddTrain.run", "N=" + N);
+        double range = 6 / Math.sqrt(N);
 
         entityVec = new float[entityCount][N];
         for (int i = 0; i < entityCount; i++) {
             for (int j = 0; j < N; j++) {
-                entityVec[i][j] = (float) RANDOM.nextGaussian();
+                entityVec[i][j] = (float) uniform(-range, range);
             }
             normalizeL2(entityVec[i]);
         }
@@ -91,22 +93,19 @@ public class PTransEAddTrain {
         relationVec = new float[relationCount][N];
         for (int i = 0; i< relationCount; i++) {
             for (int j = 0; j < N; j++) {
-                relationVec[i][j] = (float) RANDOM.nextGaussian();
+                relationVec[i][j] = (float) uniform(-range, range);
             }
             normalizeL2(relationVec[i]);
         }
 
-        bfgs();
+        learn();
         writeRelationVec();
         writeEntityVec();
     }
 
-    /**
-     * Broyden–Fletcher–Goldfarb–Shanno is a quasi-Newton Method for gradient-descent.
-     */
-    private void bfgs() throws IOException {
+    private void learn() throws IOException {
         long startMs = System.currentTimeMillis();
-        Log.info("PTransEAddTrain.bfgs", "margin=" + MARGIN);
+        Log.info("PTransEAddTrain.learn", "margin=" + MARGIN);
         int batchSize = headIds.size() / BATCH_COUNT;
 
         relationTmp = deepCopy(relationVec);
@@ -114,11 +113,11 @@ public class PTransEAddTrain {
 
         for (int epoch = 0; epoch < EPOCHS; epoch++) {
             epochError = new AtomicDouble();
-            if (epoch % (EPOCHS / 5) == 0) {
+            if (epoch % (EPOCHS / 8) == 0) {
                 if (epoch > 0) {
                     learningRate /= 2;
                 }
-                Log.info("PTransEAddTrain.bfgs", "learningRate=" + learningRate);
+                Log.info("PTransEAddTrain.learn", "learningRate=" + learningRate);
             }
 
             for (int batch = 0; batch < BATCH_COUNT; batch++) {
@@ -156,20 +155,6 @@ public class PTransEAddTrain {
                                     2 * MARGIN, pathResource * pathConfidence);
                         }
                     }
-
-                    // TODO: these aren't really thread safe with train/update
-                    for (int id : ImmutableSet.of(headId, tailId, corruptHeadId, corruptTailId)) {
-                        synchronized(entityTmp[id]) {
-                            normalizeL2(entityTmp[id]);
-                        }
-                    }
-                    // TODO: the reference doesn't normalize corruptRelationIds or paths?
-                    for (int id : modifiedRelationIds) {
-                        synchronized(relationTmp[id]) {
-                            normalizeL2(relationTmp[id]);
-                        }
-                    }
-
                 });
 
                 relationVec = deepCopy(relationTmp);
@@ -177,7 +162,7 @@ public class PTransEAddTrain {
             }
 
             if (epoch % 10 == 0) {
-                Log.info("PTransEAddTrain.bfgs",
+                Log.info("PTransEAddTrain.learn",
                         "epoch " + epoch + "/" + EPOCHS + ", epochError=" +
                                 epochError.get() + ", time=" +
                                 (System.currentTimeMillis() - startMs) + "ms");
@@ -215,21 +200,30 @@ public class PTransEAddTrain {
      */
     private Triple<Integer, Integer, Integer> corruptTriple(int headId, int relationId, int tailId) {
         double tmp = Math.random();
-        if (tmp < 0.25) {
+        if (tmp < 0.3) {
             // Corrupt the head entity
-            int corruptEntityId = randMax(entityCount);
+            int corruptEntityId = corruptEntity(headId, relationId);
+            int i = 0;
             while (positiveTripleExists(new Pair<>(corruptEntityId, relationId), tailId)) {
-                corruptEntityId = randMax(entityCount);
+                corruptEntityId = corruptEntity(headId, relationId);
+                i++;
+                if (i > 8) {
+                    break;
+                }
             }
 
             return new Triple<>(corruptEntityId, relationId, tailId);
-        } else if (tmp < 0.5) {
+        } else if (tmp < 0.6) {
             // Corrupt the tail entity
+            int corruptEntityId = corruptEntity(tailId, relationId);
             Pair<Integer, Integer> key = new Pair<>(headId, relationId);
-
-            int corruptEntityId = randMax(entityCount);
+            int i = 0;
             while (positiveTripleExists(key, corruptEntityId)) {
-                corruptEntityId = randMax(entityCount);
+                corruptEntityId = corruptEntity(tailId, relationId);
+                i++;
+                if (i > 8) {
+                    break;
+                }
             }
             return new Triple<>(headId, relationId, corruptEntityId);
         } else {
@@ -240,6 +234,23 @@ public class PTransEAddTrain {
             }
             return new Triple<>(headId, corruptRelationId, tailId);
         }
+    }
+
+    /**
+     * Returns another entity with the same type (unless the relaionId corresponds to
+     * KGRelation.INSTANCE_OF.
+     */
+    private int corruptEntity(int entityId, int relationId) {
+        char type = idToType.get(entityId);
+        if (relationId == KGRelation.INSTANCE_OF.ordinal() ||
+                relationId == (KGRelation.INSTANCE_OF.ordinal() + KGRelation.values().length)) {
+            while (type == idToType.get(entityId)) {
+                type = types.get(randMax(types.size()));
+            }
+        }
+
+        List<Integer> typeEntities = typeToIds.get(type);
+        return typeEntities.get(randMax(typeEntities.size()));
     }
 
     private boolean positiveTripleExists(Pair<Integer, Integer> key, int tailId) {
@@ -274,18 +285,21 @@ public class PTransEAddTrain {
     }
 
     private void updateRelation(int r1, int[] rel_path, double delta) {
-        for (int k = 0; k < N; k++) {
-            double x = relationVec[r1][k];
-            for (int path : rel_path) {
-                x -= relationVec[path][k];
-            }
+        synchronized (relationVec[r1]) {
+            for (int k = 0; k < N; k++) {
+                double x = relationVec[r1][k];
+                for (int path : rel_path) {
+                    x -= relationVec[path][k];
+                }
 
-            relationTmp[r1][k] += delta * learningRate * x;
+                relationTmp[r1][k] += delta * learningRate * x;
 
-            x /= (float) rel_path.length;
-            for (int path : rel_path) {
-                relationTmp[path][k] -= delta * learningRate * x;
+                x /= (float) rel_path.length;
+                for (int path : rel_path) {
+                    relationTmp[path][k] -= delta * learningRate * x;
+                }
             }
+            normalizeL2(relationVec[r1]);
         }
     }
 
@@ -297,7 +311,6 @@ public class PTransEAddTrain {
             int corruptHeadId, int corruptRelationId, int corruptTailId) {
         double positiveError = evalTriple(trueHeadId, trueTailId, trueRelationId);
         double corruptError = evalTriple(corruptHeadId, corruptTailId, corruptRelationId);
-//        System.out.println(trueHeadId+","+trueTailId+","+trueRelationId+";"+corruptHeadId+","+corruptTailId+","+corruptRelationId+" -> "+positiveScore+":"+corruptScore);
         if (positiveError + MARGIN > corruptError) {
             epochError.addAndGet(positiveError + MARGIN - corruptError);
             updateTriple(trueHeadId, trueRelationId, trueTailId, -1);
@@ -315,13 +328,26 @@ public class PTransEAddTrain {
     }
 
     private void updateTriple(int headId, int relationId, int tailId, double delta) {
-        for (int j = 0; j < N; j++) {
-            double x = entityVec[tailId][j] - entityVec[headId][j] - relationVec[relationId][j];
+        int firstLock = Math.min(headId, tailId);
+        int secondLock = Math.max(headId, tailId);
 
-            relationTmp[relationId][j] -= delta * learningRate * x;
-            entityTmp[headId][j] -= delta * learningRate * x;
-            entityTmp[tailId][j] += delta * learningRate * x;
+        synchronized (entityTmp[firstLock]) {
+            synchronized (entityTmp[secondLock]) {
+                synchronized (relationVec[relationId]) {
+                    for (int j = 0; j < N; j++) {
+                        double x = entityVec[tailId][j] - entityVec[headId][j] - relationVec[relationId][j];
+
+                        relationTmp[relationId][j] -= delta * learningRate * x;
+                        entityTmp[headId][j] -= delta * learningRate * x;
+                        entityTmp[tailId][j] += delta * learningRate * x;
+                    }
+                    normalizeL2(relationVec[relationId]);
+                }
+                normalizeL2(entityTmp[secondLock]);
+            }
+            normalizeL2(entityTmp[firstLock]);
         }
+
     }
 
     /**
@@ -350,10 +376,16 @@ public class PTransEAddTrain {
                 List<String> split = WHITESPACE_SPLITTER.splitToList(line);
                 String entity = split.get(0);
                 int id = Integer.valueOf(split.get(1));
+
                 entityToId.put(entity, id);
+                char entityType = entity.charAt(0);
+                idToType.putIfAbsent(id, entityType);
+                typeToIds.putIfAbsent(entityType, new ArrayList<>());
+                typeToIds.get(entityType).add(id);
                 entityCount++;
             }
         }
+        typeToIds.keySet().forEach(types::add);
 
         Log.info("PTransEAddTrain.prepare", "Loading relations from " +
                 KGCompletion.RELATION2ID_FILE + "...");
@@ -465,7 +497,7 @@ public class PTransEAddTrain {
         }
     }
 
-    public static double l2Norm(float[] x) {
+    static double l2Norm(float[] x) {
         double len = 0;
         for (float i : x) {
             len += i * i;
@@ -480,6 +512,10 @@ public class PTransEAddTrain {
                 x[i] /= l;
             }
         }
+    }
+
+    private static double uniform(double min, double max) {
+        return min + (max - min) * Math.random();
     }
 
     private static int randMax(int max) {
